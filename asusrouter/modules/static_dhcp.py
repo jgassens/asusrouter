@@ -11,7 +11,7 @@ from asusrouter.tools.identifiers import IpAddress, MacAddress
 KEY_STATIC_DHCP_LIST = "dhcp_staticlist"
 KEY_STATIC_DHCP_STATE = "dhcp_static_x"
 
-SERVICE_STATIC_DHCP_APPLY = "restart_dnsmasq"
+SERVICE_STATIC_DHCP_APPLY = "restart_net_and_phy"
 
 LEASE_DELIMITER = "<"
 LEASE_DELIMITER_ESCAPED = "&#60"
@@ -165,11 +165,13 @@ def compile_static_dhcp_leases(
         mac_addresses.add(lease.mac)
         ip_addresses.add(lease.ip)
 
-        result += (
-            f"{LEASE_DELIMITER}{lease.mac}{LEASE_FIELD_DELIMITER}{lease.ip}"
-            f"{LEASE_FIELD_DELIMITER}{lease.dns}"
-            f"{LEASE_FIELD_DELIMITER}{lease.hostname}"
-        )
+        fields = [lease.mac, lease.ip]
+        if lease.dns or lease.hostname:
+            fields.append(lease.dns)
+        if lease.hostname:
+            fields.append(lease.hostname)
+
+        result += f"{LEASE_DELIMITER}{LEASE_FIELD_DELIMITER.join(fields)}"
 
     return {
         KEY_STATIC_DHCP_LIST: result,

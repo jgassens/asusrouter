@@ -80,7 +80,7 @@ def test_compile_static_dhcp_leases() -> None:
     assert result == {
         KEY_STATIC_DHCP_LIST: (
             "<AA:BB:CC:DD:EE:FF>192.168.1.2>1.1.1.1>printer"
-            "<11:22:33:44:55:66>192.168.1.3>>"
+            "<11:22:33:44:55:66>192.168.1.3"
         ),
         KEY_STATIC_DHCP_STATE: 1,
     }
@@ -99,6 +99,25 @@ def test_compile_static_dhcp_leases_invalid_type() -> None:
     """Test compile_static_dhcp_leases with an invalid collection type."""
 
     assert compile_static_dhcp_leases(()) is None
+
+
+def test_compile_static_dhcp_leases_with_hostname_without_dns() -> None:
+    """Test compile_static_dhcp_leases preserves empty DNS before hostname."""
+
+    result = compile_static_dhcp_leases(
+        [
+            StaticDHCPLease(
+                mac="AA:BB:CC:DD:EE:FF",
+                ip="192.168.1.2",
+                hostname="printer",
+            )
+        ]
+    )
+
+    assert result == {
+        KEY_STATIC_DHCP_LIST: "<AA:BB:CC:DD:EE:FF>192.168.1.2>>printer",
+        KEY_STATIC_DHCP_STATE: 1,
+    }
 
 
 @pytest.mark.parametrize(
@@ -197,7 +216,7 @@ async def test_async_apply_static_dhcp_leases(
     async_run_service.assert_awaited_once_with(
         service=SERVICE_STATIC_DHCP_APPLY,
         arguments={
-            KEY_STATIC_DHCP_LIST: "<AA:BB:CC:DD:EE:FF>192.168.1.2>>",
+            KEY_STATIC_DHCP_LIST: "<AA:BB:CC:DD:EE:FF>192.168.1.2",
             KEY_STATIC_DHCP_STATE: 1,
         },
         apply=True,
