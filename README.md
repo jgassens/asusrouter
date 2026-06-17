@@ -4,9 +4,8 @@ This fork branch adds fixed-IP DHCP reservation helpers to the `asusrouter`
 Python library used by the Home Assistant AsusRouter integration.
 
 The original library can read a lot of router state and can already apply some
-router settings, but it did not expose a clean way for an agent or integration
-to manage ASUSWRT manual DHCP assignments. This branch adds that missing
-surface without requiring SSH.
+router settings, but it did not expose a way for an integration
+to manage ASUSWRT manual DHCP assignments. 
 
 ## Problem
 
