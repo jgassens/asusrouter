@@ -6,6 +6,7 @@ from .asusrouter import AsusRouter
 from .error import AsusRouterError
 from .modules.data import AsusData
 from .modules.endpoint import Endpoint
+from .modules.static_dhcp import StaticDHCPLease
 from .tools.dump import AsusRouterDump
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "AsusRouterError",
     "AsusData",
     "Endpoint",
+    "StaticDHCPLease",
     "AsusRouterDump",
 ]

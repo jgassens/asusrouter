@@ -83,11 +83,20 @@ from asusrouter.modules.state import (
     save_state,
     set_state,
 )
+from asusrouter.modules.static_dhcp import (
+    KEY_STATIC_DHCP_LIST,
+    SERVICE_STATIC_DHCP_APPLY,
+    StaticDHCPLease,
+    compile_static_dhcp_leases,
+    normalize_static_dhcp_mac,
+    parse_static_dhcp_leases,
+)
 from asusrouter.registry import ARCallableRegistry as ARCallReg
 from asusrouter.tools import legacy
 from asusrouter.tools.converters import get_enum_key_by_value, safe_list
 from asusrouter.tools.readers import merge_dicts
 from asusrouter.tools.types import ARCallableType, ARCallbackType
+from asusrouter.tools.writers import nvram
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1226,6 +1235,88 @@ class AsusRouter:
 
     # ---------------------------
     # <-- Service-related methods
+    # ---------------------------
+
+    # ---------------------------
+    # Static DHCP methods -->
+    # ---------------------------
+
+    async def async_get_static_dhcp_leases(self) -> list[StaticDHCPLease]:
+        """Get static DHCP leases."""
+
+        request = nvram([KEY_STATIC_DHCP_LIST])
+        if not request:
+            return []
+
+        response = await self.async_api_hook(request)
+        return parse_static_dhcp_leases(response.get(KEY_STATIC_DHCP_LIST))
+
+    async def async_apply_static_dhcp_leases(
+        self,
+        leases: list[StaticDHCPLease],
+    ) -> bool:
+        """Apply static DHCP leases."""
+
+        request = compile_static_dhcp_leases(leases)
+
+        if request:
+            return await self.async_run_service(
+                service=SERVICE_STATIC_DHCP_APPLY,
+                arguments=request,
+                apply=True,
+            )
+
+        return False
+
+    async def async_set_static_dhcp_lease(
+        self,
+        mac: str,
+        ip: str,
+        hostname: str | None = None,
+        dns: str | None = None,
+    ) -> bool:
+        """Set a static DHCP lease."""
+
+        current_leases = await self.async_get_static_dhcp_leases()
+        lease = StaticDHCPLease(
+            mac=mac,
+            ip=ip,
+            dns=dns or "",
+            hostname=hostname or "",
+        )
+        lease_mac = normalize_static_dhcp_mac(lease.mac)
+
+        current_leases = [
+            current_lease
+            for current_lease in current_leases
+            if normalize_static_dhcp_mac(current_lease.mac) != lease_mac
+        ]
+        current_leases.append(lease)
+
+        return await self.async_apply_static_dhcp_leases(current_leases)
+
+    async def async_remove_static_dhcp_lease(
+        self,
+        mac: str,
+        apply: bool = True,
+    ) -> list[StaticDHCPLease]:
+        """Remove a static DHCP lease."""
+
+        current_leases = await self.async_get_static_dhcp_leases()
+        lease_mac = normalize_static_dhcp_mac(mac)
+        current_leases = [
+            lease
+            for lease in current_leases
+            if normalize_static_dhcp_mac(lease.mac) != lease_mac
+        ]
+
+        if apply:
+            await self.async_apply_static_dhcp_leases(current_leases)
+
+        return current_leases
+
+    # ---------------------------
+    # <-- Static DHCP methods
     # ---------------------------
 
     # ---------------------------
