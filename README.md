@@ -17,6 +17,14 @@ Installation of the latest release is available from PyPI:
 pip install asusrouter
 ```
 
+### Install this fork branch
+
+This branch adds static DHCP lease helpers that are not part of the latest PyPI release yet. Install this fork branch directly with:
+
+```
+pip install "asusrouter @ git+https://github.com/jgassens/asusrouter.git@codex/static-dhcp-leases"
+```
+
 ## Usage
 
 Once installed, you can import the `AsusRouter` class from the module. Example shows the default parameters except for `host`, `username` and `password`.
@@ -51,6 +59,41 @@ print(data)
 loop.run_until_complete(router.async_disconnect())
 loop.run_until_complete(session.close())
 ```
+
+### Static DHCP lease helpers
+
+This fork branch can read, add, replace, and remove ASUSWRT manual DHCP assignments over the same HTTP(S) API used by the router Web UI. It does not require SSH.
+
+```python
+from asusrouter import AsusRouter, StaticDHCPLease
+
+# Get existing fixed IP reservations
+leases = await router.async_get_static_dhcp_leases()
+
+# Add or update one reservation while preserving the rest of the list
+await router.async_set_static_dhcp_lease(
+    mac="AA:BB:CC:DD:EE:FF",
+    ip="192.168.1.50",
+    hostname="printer",
+    dns="1.1.1.1",
+)
+
+# Remove one reservation while preserving the rest of the list
+await router.async_remove_static_dhcp_lease("AA:BB:CC:DD:EE:FF")
+
+# Replace the full static DHCP reservation list
+await router.async_apply_static_dhcp_leases(
+    [
+        StaticDHCPLease(
+            mac="AA:BB:CC:DD:EE:FF",
+            ip="192.168.1.50",
+            hostname="printer",
+        ),
+    ]
+)
+```
+
+`async_apply_static_dhcp_leases()` sends the full reservation list, so callers should first read the current list if they only want to add, update, or delete one device. The helpers update the ASUSWRT `dhcp_staticlist` and `dhcp_static_x` NVRAM fields and apply them with `restart_net_and_phy`, matching stock ASUSWRT Web UI behavior. The serializer writes stock-compatible row formats such as `<MAC>IP`, `<MAC>IP>DNS`, and `<MAC>IP>DNS>hostname`.
 
 ## Supported devices
 
