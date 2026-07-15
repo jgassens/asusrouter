@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from asusrouter.asusrouter import AsusRouter
+from asusrouter.error import AsusRouterDataError
 from asusrouter.modules.static_dhcp import (
     KEY_STATIC_DHCP_LIST,
     KEY_STATIC_DHCP_STATE,
+    LAYOUT_LEGACY,
     SERVICE_STATIC_DHCP_APPLY,
     StaticDHCPLease,
     compile_static_dhcp_leases,
@@ -24,7 +27,6 @@ def test_parse_static_dhcp_leases() -> None:
     result = parse_static_dhcp_leases(
         "<AA:BB:CC:DD:EE:FF>192.168.1.2>1.1.1.1>printer"
         "<11:22:33:44:55:66>192.168.1.3"
-        "<missing-ip>"
     )
 
     assert result == [
@@ -36,6 +38,31 @@ def test_parse_static_dhcp_leases() -> None:
         ),
         StaticDHCPLease(mac="11:22:33:44:55:66", ip="192.168.1.3"),
     ]
+
+
+def test_parse_static_dhcp_leases_rejects_malformed_row() -> None:
+    """Reject the complete response rather than silently dropping a row."""
+
+    with pytest.raises(ValueError, match="Unrecognized"):
+        parse_static_dhcp_leases("<AA:BB:CC:DD:EE:FF>192.168.1.2<missing-ip>")
+
+
+def test_parse_static_dhcp_leases_preserves_legacy_hostname() -> None:
+    """Treat a non-IP third column as the stock legacy hostname layout."""
+
+    result = parse_static_dhcp_leases("<AA:BB:CC:DD:EE:FF>192.168.1.2>printer")
+
+    assert result == [
+        StaticDHCPLease(
+            mac="AA:BB:CC:DD:EE:FF",
+            ip="192.168.1.2",
+            hostname="printer",
+            layout=LAYOUT_LEGACY,
+        )
+    ]
+    assert compile_static_dhcp_leases(result)[KEY_STATIC_DHCP_LIST] == (
+        "<AA:BB:CC:DD:EE:FF>192.168.1.2>printer"
+    )
 
 
 @pytest.mark.parametrize("content", [None, ""])
@@ -95,10 +122,13 @@ def test_compile_static_dhcp_leases_empty() -> None:
     }
 
 
-def test_compile_static_dhcp_leases_invalid_type() -> None:
-    """Test compile_static_dhcp_leases with an invalid collection type."""
+def test_compile_static_dhcp_leases_accepts_iterable() -> None:
+    """Compile any iterable accepted by the public type annotation."""
 
-    assert compile_static_dhcp_leases(()) is None
+    assert compile_static_dhcp_leases(()) == {
+        KEY_STATIC_DHCP_LIST: "",
+        KEY_STATIC_DHCP_STATE: 0,
+    }
 
 
 def test_compile_static_dhcp_leases_with_hostname_without_dns() -> None:
@@ -118,6 +148,24 @@ def test_compile_static_dhcp_leases_with_hostname_without_dns() -> None:
         KEY_STATIC_DHCP_LIST: "<AA:BB:CC:DD:EE:FF>192.168.1.2>>printer",
         KEY_STATIC_DHCP_STATE: 1,
     }
+
+
+def test_compile_static_dhcp_leases_preserves_literal_none_hostname() -> None:
+    """Preserve a hostname that happens to contain the text None."""
+
+    result = compile_static_dhcp_leases(
+        [
+            StaticDHCPLease(
+                mac="00:11:22:33:44:55",
+                ip="192.168.1.2",
+                hostname="None",
+            )
+        ]
+    )
+
+    assert result[KEY_STATIC_DHCP_LIST] == (
+        "<00:11:22:33:44:55>192.168.1.2>>None"
+    )
 
 
 @pytest.mark.parametrize(
@@ -167,6 +215,7 @@ def test_normalize_static_dhcp_mac() -> None:
     """Test normalize_static_dhcp_mac."""
 
     assert normalize_static_dhcp_mac("aabbccddeeff") == "AA:BB:CC:DD:EE:FF"
+    assert normalize_static_dhcp_mac("001122334455") == "00:11:22:33:44:55"
 
 
 @pytest.mark.asyncio
@@ -178,16 +227,19 @@ async def test_async_get_static_dhcp_leases(
 
     async_api_hook = AsyncMock(
         return_value={
+            KEY_STATIC_DHCP_STATE: "0",
             KEY_STATIC_DHCP_LIST: (
                 "<AA:BB:CC:DD:EE:FF>192.168.1.2>1.1.1.1>printer"
-            )
+            ),
         }
     )
     monkeypatch.setattr(router, "async_api_hook", async_api_hook)
 
     result = await router.async_get_static_dhcp_leases()
 
-    async_api_hook.assert_awaited_once_with("nvram_get(dhcp_staticlist);")
+    async_api_hook.assert_awaited_once_with(
+        "nvram_get(dhcp_static_x);nvram_get(dhcp_staticlist);"
+    )
     assert result == [
         StaticDHCPLease(
             mac="AA:BB:CC:DD:EE:FF",
@@ -196,6 +248,23 @@ async def test_async_get_static_dhcp_leases(
             hostname="printer",
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_async_get_static_dhcp_leases_rejects_incomplete_response(
+    router: AsusRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not reinterpret a missing list as an authoritative empty list."""
+
+    monkeypatch.setattr(
+        router,
+        "async_api_hook",
+        AsyncMock(return_value={KEY_STATIC_DHCP_STATE: "1"}),
+    )
+
+    with pytest.raises(AsusRouterDataError, match="Incomplete"):
+        await router.async_get_static_dhcp_leases()
 
 
 @pytest.mark.asyncio
@@ -230,16 +299,17 @@ async def test_async_set_static_dhcp_lease(
 ) -> None:
     """Test async_set_static_dhcp_lease."""
 
-    async_get_static_dhcp_leases = AsyncMock(
-        return_value=[
-            StaticDHCPLease(mac="AA:BB:CC:DD:EE:FF", ip="192.168.1.2")
-        ]
+    async_get_static_dhcp_snapshot = AsyncMock(
+        return_value=(
+            True,
+            [StaticDHCPLease(mac="AA:BB:CC:DD:EE:FF", ip="192.168.1.2")],
+        )
     )
     async_apply_static_dhcp_leases = AsyncMock(return_value=True)
     monkeypatch.setattr(
         router,
-        "async_get_static_dhcp_leases",
-        async_get_static_dhcp_leases,
+        "_async_get_static_dhcp_snapshot",
+        async_get_static_dhcp_snapshot,
     )
     monkeypatch.setattr(
         router,
@@ -258,12 +328,13 @@ async def test_async_set_static_dhcp_lease(
     async_apply_static_dhcp_leases.assert_awaited_once_with(
         [
             StaticDHCPLease(
-                mac="aabbccddeeff",
+                mac="AA:BB:CC:DD:EE:FF",
                 ip="192.168.1.10",
                 dns="1.1.1.1",
                 hostname="printer",
             )
-        ]
+        ],
+        enabled=True,
     )
 
 
@@ -278,12 +349,12 @@ async def test_async_remove_static_dhcp_lease(
         StaticDHCPLease(mac="AA:BB:CC:DD:EE:FF", ip="192.168.1.2"),
         StaticDHCPLease(mac="11:22:33:44:55:66", ip="192.168.1.3"),
     ]
-    async_get_static_dhcp_leases = AsyncMock(return_value=leases)
+    async_get_static_dhcp_snapshot = AsyncMock(return_value=(True, leases))
     async_apply_static_dhcp_leases = AsyncMock(return_value=True)
     monkeypatch.setattr(
         router,
-        "async_get_static_dhcp_leases",
-        async_get_static_dhcp_leases,
+        "_async_get_static_dhcp_snapshot",
+        async_get_static_dhcp_snapshot,
     )
     monkeypatch.setattr(
         router,
@@ -296,4 +367,66 @@ async def test_async_remove_static_dhcp_lease(
     assert result == [
         StaticDHCPLease(mac="11:22:33:44:55:66", ip="192.168.1.3")
     ]
-    async_apply_static_dhcp_leases.assert_awaited_once_with(result)
+    async_apply_static_dhcp_leases.assert_awaited_once_with(
+        result,
+        enabled=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_remove_static_dhcp_lease_reports_apply_failure(
+    router: AsusRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raise when dnsmasq does not accept a removal."""
+
+    leases = [StaticDHCPLease(mac="AA:BB:CC:DD:EE:FF", ip="192.168.1.2")]
+    monkeypatch.setattr(
+        router,
+        "_async_get_static_dhcp_snapshot",
+        AsyncMock(return_value=(True, leases)),
+    )
+    monkeypatch.setattr(
+        router,
+        "async_apply_static_dhcp_leases",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(AsusRouterDataError, match="removal"):
+        await router.async_remove_static_dhcp_lease("aabbccddeeff")
+
+
+@pytest.mark.asyncio
+async def test_static_dhcp_updates_are_serialized(
+    router: AsusRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent whole-list updates must not overwrite each other."""
+
+    saved: list[StaticDHCPLease] = []
+
+    async def get_snapshot() -> tuple[bool, list[StaticDHCPLease]]:
+        await asyncio.sleep(0)
+        return True, list(saved)
+
+    async def apply(
+        leases: list[StaticDHCPLease],
+        *,
+        enabled: bool | None = None,
+    ) -> bool:
+        del enabled
+        await asyncio.sleep(0)
+        saved[:] = leases
+        return True
+
+    monkeypatch.setattr(
+        router, "_async_get_static_dhcp_snapshot", get_snapshot
+    )
+    monkeypatch.setattr(router, "async_apply_static_dhcp_leases", apply)
+
+    await asyncio.gather(
+        router.async_set_static_dhcp_lease("00:11:22:33:44:55", "192.168.1.2"),
+        router.async_set_static_dhcp_lease("AA:BB:CC:DD:EE:FF", "192.168.1.3"),
+    )
+
+    assert {lease.ip for lease in saved} == {"192.168.1.2", "192.168.1.3"}
