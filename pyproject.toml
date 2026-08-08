@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "asusrouter"
-version         = "2.0.0.dev0"
+version         = "2.0.0+jgassens.1"
 license         = "Apache-2.0"
 license-files   = ["LICENSE"]
 requires-python = ">=3.11"
 readme          = "README.md"
-description     = "API wrapper for communication with ASUSWRT-powered routers using HTTP protocol"
+description     = "Independently maintained ASUSWRT HTTP client with guarded static DHCP controls"
 authors         = [
     { name="Yevhenii Vaskivskyi", email="yevhenii@vaskivskyi.com" },
+]
+maintainers     = [
+    { name="Jeremiah Gassensmith" },
 ]
 classifiers     = [
     "Development Status :: 4 - Beta",
@@ -30,9 +33,9 @@ dependencies    = [
 ]
 
 [project.urls]
-"Homepage"      = "https://asusrouter.vaskivskyi.com/"
-"Source Code"   = "https://github.com/Vaskivskyi/asusrouter"
-"Bug Reports"   = "https://github.com/Vaskivskyi/asusrouter/issues"
+"Homepage"      = "https://github.com/jgassens/asusrouter"
+"Source Code"   = "https://github.com/jgassens/asusrouter"
+"Bug Reports"   = "https://github.com/jgassens/asusrouter/issues"
 
 [tool.setuptools.packages.find]
 include = ["asusrouter*"]

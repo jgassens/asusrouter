@@ -1,39 +1,22 @@
-# Static DHCP Reservations for ASUSWRT
+# AsusRouter HTTP Client
 
-This fork branch adds fixed-IP DHCP reservation helpers to the `asusrouter`
-Python library used by the Home Assistant AsusRouter integration.
+This repository is the independently maintained `asusrouter` Python library
+used by [AsusRouter Fixed IP](https://github.com/jgassens/ha-asusrouter).
+It communicates with ASUSWRT routers through their authenticated HTTP(S) WebUI
+interface and includes guarded static-DHCP reservation support.
 
-The original library can read a lot of router state and can already apply some
-router settings, but it did not expose a way for an integration
-to manage ASUSWRT manual DHCP assignments. 
+Current maintenance release: **v2.0.0+jgassens.1**.
 
-## Problem
+## Purpose
 
-ASUS routers let users assign fixed IP addresses to devices through the Web UI:
+The stable **main** branch is the compatibility line consumed by the Home
+Assistant integration. The integration pins an exact Git commit so a router
+control release cannot change underneath an installed Home Assistant version.
 
-`LAN > DHCP Server > Manually Assigned IP around the DHCP list`
+This package is maintained independently and is not published over the
+source project's PyPI package. Install this maintenance line from GitHub.
 
-That state is useful for automation, but the existing Python library did not
-offer a supported helper for:
-
-- reading fixed-IP reservations
-- adding or updating one device reservation
-- removing one device reservation
-- replacing the reservation list intentionally
-
-For my use case, Codex Terminal Pro needs to manage router reservations through
-the same authenticated HTTP(S) path that Home Assistant already uses, instead
-of logging in by SSH and editing router internals directly.
-
-## How This Branch Solves It
-
-ASUSWRT stores manual DHCP reservations in NVRAM:
-
-- `dhcp_staticlist`: serialized static DHCP rows
-- `dhcp_static_x`: enable flag for manual DHCP assignment
-
-This branch adds a `StaticDHCPLease` dataclass plus async helpers on
-`AsusRouter`:
+## Static DHCP API
 
 ```python
 from asusrouter import StaticDHCPLease
@@ -44,7 +27,6 @@ await router.async_set_static_dhcp_lease(
     mac="AA:BB:CC:DD:EE:FF",
     ip="192.168.1.50",
     hostname="printer",
-    dns="1.1.1.1",
 )
 
 await router.async_remove_static_dhcp_lease("AA:BB:CC:DD:EE:FF")
@@ -60,79 +42,60 @@ await router.async_apply_static_dhcp_leases(
 )
 ```
 
-`async_set_static_dhcp_lease()` and `async_remove_static_dhcp_lease()` preserve
-the rest of the router's current reservation list. `async_apply_static_dhcp_leases()`
-replaces the full list and should be used deliberately.
+The set and remove helpers preserve unrelated reservations. The full-list
+apply helper intentionally replaces the list and should be used with care.
 
-## Wire Format
+Inputs are normalized and validated for malformed MAC addresses, invalid IPv4
+values, duplicate MAC or IP assignments, and delimiter injection. Writes are
+read back from the router by the Home Assistant integration.
 
-ASUSWRT serializes `dhcp_staticlist` as rows separated by `<` with fields
-separated by `>`:
+## Install
 
-```text
-<MAC>IP
-<MAC>IP>DNS
-<MAC>IP>DNS>hostname
+```sh
+pip install "asusrouter @ git+https://github.com/jgassens/asusrouter.git@v2.0.0+jgassens.1"
 ```
 
-This branch parses both raw delimiters and the escaped delimiters returned by
-some ASUS Web UI endpoints, such as `&#60` and `&#62`.
+Applications that control real routers should pin a release tag or commit
+rather than installing from a moving branch.
 
-When writing, it normalizes and validates:
+## Compatibility
 
-- MAC addresses
-- IPv4 reservation addresses
-- optional IPv4 DNS values
-- duplicate MAC addresses
-- duplicate IP addresses
-- delimiter characters inside user-provided fields
+- Python 3.11 through 3.14.
+- Stock ASUSWRT 3.0.0.4.x and 3.0.0.6.x are the primary target.
+- AsusWRT-Merlin is expected to work where it exposes the same WebUI state and
+  apply actions.
+- Router SSH is not required for static DHCP operations.
 
-The apply path updates `dhcp_staticlist` and `dhcp_static_x`, then applies the
-change with `restart_net_and_phy`, matching stock ASUSWRT Web UI behavior seen
-in current firmware pages.
+ASUS models and firmware revisions vary. Back up the router configuration and
+verify the first write in the ASUS WebUI.
 
-## Expected Compatibility
+## Maintenance
 
-Expected to work on both stock ASUSWRT and AsusWRT-Merlin.
+Development targets **main**. Source-project changes may be evaluated and
+ported when useful, but this repository does not automatically merge or rebase
+them. Compatibility with the released Home Assistant integration takes
+priority over adopting an incompatible API rewrite.
 
-Evidence checked while building this branch:
+Report library or router-protocol problems in
+[this repository's issue tracker](https://github.com/jgassens/asusrouter/issues).
+Home Assistant UI and action problems belong in
+[jgassens/ha-asusrouter](https://github.com/jgassens/ha-asusrouter/issues).
 
-- Older stock ASUSWRT sources use `dhcp_staticlist` and `dhcp_static_x`, then
-  write static leases into `/etc/ethers`.
-- Stock Blue Cave ASUSWRT Web UI reads and writes `dhcp_staticlist` as
-  `<MAC>IP>DNS`.
-- Current extracted stock RT-AX88U Pro Web UI reads and writes
-  `<MAC>IP>DNS>hostname` and applies the DHCP page with `restart_net_and_phy`.
-- Merlin's DHCP page uses the same `dhcp_staticlist` / `dhcp_static_x` state
-  and compatible row parsing.
+## Development
 
-The branch has not yet been confirmed against a live stock router by actually
-creating a reservation on hardware. The source/Web UI evidence is strong, but a
-real-device smoke test is still the last mile.
-
-## Install This Branch
-
-```bash
-pip install "asusrouter @ git+https://github.com/jgassens/asusrouter.git@codex/static-dhcp-leases"
+```sh
+uv sync --all-groups
+uv run pytest
+uv run ruff check asusrouter tests
+uv run ruff format --check asusrouter tests
 ```
 
-## Test Status
+## Attribution
 
-Validated locally on this branch:
+This project is derived from
+[Vaskivskyi/asusrouter](https://github.com/Vaskivskyi/asusrouter) and is
+maintained independently. It is not affiliated with ASUS or endorsed by the
+source project's maintainers.
 
-```text
-pytest tests/modules/test_static_dhcp.py  # 18 passed
-ruff check                               # passed
-ruff format --check asusrouter tests     # passed
-pytest                                   # 1596 passed
-```
-
-## Branch
-
-Upstream base: `Vaskivskyi/asusrouter` `dev`
-
-Fork branch:
-
-```text
-jgassens/asusrouter@codex/static-dhcp-leases
-```
+The Apache-2.0 license, NOTICE file, original authorship, and Git history are
+preserved.

@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: "daily"
     assignees:
-      - "Vaskivskyi"
+      - "jgassens"
     labels:
       - "dependencies"
   - package-ecosystem: "uv"
@@ -13,6 +13,6 @@ updates:
     schedule:
       interval: "daily"
     assignees:
-      - "Vaskivskyi"
+      - "jgassens"
     labels:
       - "dependencies"

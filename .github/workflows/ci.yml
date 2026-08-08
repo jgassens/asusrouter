@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - dev
     paths:
       - "**/*.py"
       - ".github/workflows/**"
@@ -171,40 +170,3 @@ jobs:
         with:
           name: real-data-tests-cov-${{ matrix.python-version }}
           path: real-data-tests-cov-${{ matrix.python-version }}.xml
-
-  codecov:
-    name: Codecov
-    needs: [unit-tests, device-tests]
-    runs-on: ubuntu-latest
-
-    if: ${{ github.actor != 'dependabot[bot]' }}
-
-    permissions:
-      contents: read
-      checks: write
-
-    strategy:
-      matrix:
-        python-version: [3.11, 3.12, 3.13, 3.14]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Download unit-tests coverage from artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: unit-tests-cov-${{ matrix.python-version }}
-          path: .
-
-      - name: Download real-data-tests coverage from artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: real-data-tests-cov-${{ matrix.python-version }}
-          path: .
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          files: unit-tests-cov-${{ matrix.python-version }}.xml,real-data-tests-cov-${{ matrix.python-version }}.xml

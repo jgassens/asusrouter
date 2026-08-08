@@ -3,7 +3,7 @@
 This module is used to convert some of the AsusRouter data
 to a format easy to handle by Home Assistant integration.
 
-Native AsusRouter integration: https://github.com/vaskivskyi/ha-asusrouter.
+Maintained Home Assistant integration: https://github.com/jgassens/ha-asusrouter.
 """
 
 from __future__ import annotations
