@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
+import logging
 from typing import Any
 
-from asusrouter.modules.data import AsusData, AsusDataState
+from asusrouter.error import AsusRouterDataError
+from asusrouter.modules.data import AsusData
 from asusrouter.tools.converters import safe_int, safe_return
+
+_LOGGER = logging.getLogger(__name__)
 
 KEY_PC_BLOCK_ALL = "MULTIFILTER_BLOCK_ALL"
 KEY_PC_MAC = "MULTIFILTER_MAC"
@@ -52,8 +56,8 @@ class ParentalControlRule:
     """Parental control rule class."""
 
     mac: str | None = None
-    name: str = ""
-    timemap: str = DEFAULT_PC_TIMEMAP
+    name: str | None = ""
+    timemap: str | None = DEFAULT_PC_TIMEMAP
     type: PCRuleType = PCRuleType.UNKNOWN
 
 
@@ -125,12 +129,20 @@ async def set_rule(
     if not isinstance(rule, ParentalControlRule):
         return False
 
-    # Get the current rules
-    current_rules = (
-        kwargs.get("router_state", {})
-        .get(AsusData.PARENTAL_CONTROL, AsusDataState(data={}))
-        .data.get("rules", {})
+    # Only a known rule table may seed a whole-table replacement.
+    router_state = kwargs.get("router_state", {})
+    parental_control = (
+        router_state.get(AsusData.PARENTAL_CONTROL)
+        if isinstance(router_state, dict)
+        else None
     )
+    data = getattr(parental_control, "data", None)
+    if not isinstance(data, dict) or not isinstance(data.get("rules"), dict):
+        _LOGGER.error(
+            "Cannot set parental control rule without a known rules dict"
+        )
+        return False
+    current_rules = data["rules"]
 
     # Get rule action
     # If the rule is not available, we need to add it
@@ -178,11 +190,11 @@ def check_rule(
         return None
 
     # Check that timemap is available and valid
-    if not rule.timemap.strip():
+    if not (rule.timemap or "").strip():
         rule.timemap = DEFAULT_PC_TIMEMAP
 
     # Check that name is available
-    if not rule.name.strip():
+    if not (rule.name or "").strip():
         rule.name = rule.mac
 
     # Return the rule
@@ -242,11 +254,32 @@ def read_pc_string(key: str, data: dict[str, str]) -> list[str]:
     return data.get(key, "").split("&#62")
 
 
-def read_pc_rules(data: dict[str, str]) -> dict[str, ParentalControlRule]:
-    """Read the parental control data."""
+def read_pc_rules(data: dict[str, Any]) -> dict[str, ParentalControlRule]:
+    """Read a complete rule table, raising on missing or unaligned vectors."""
 
-    # If no data is provided, return empty list
-    if data.get(KEY_PC_MAC) == data.get(KEY_PC_TYPE):
+    vectors = {}
+    cardinalities: dict[str, int | str] = {}
+    for key in PC_RULE_MAP:
+        if isinstance(data.get(key), str):
+            vectors[key] = read_pc_string(key, data)
+            cardinalities[key] = len(vectors[key])
+        else:
+            cardinalities[key] = "missing" if key not in data else "non-string"
+
+    if (
+        len(vectors) != len(PC_RULE_MAP)
+        or len(set(cardinalities.values())) != 1
+    ):
+        details = ", ".join(
+            f"{key}={count}" for key, count in cardinalities.items()
+        )
+        raise AsusRouterDataError(
+            "Incomplete parental control rule vectors (cardinalities): "
+            f"{details}"
+        )
+
+    # Only four explicitly empty strings represent an empty table.
+    if all(data[key] == "" for key in PC_RULE_MAP):
         return {}
 
     # The data is split in 4 strings. Each data value is split in the string
@@ -256,13 +289,13 @@ def read_pc_rules(data: dict[str, str]) -> dict[str, ParentalControlRule]:
     # Map the values to a list of `ParentalControlRule`
     rules = {}
     for rule_mac, rule_name, rule_timemap, rule_type in zip(
-        *[read_pc_string(key, data) for key in PC_RULE_MAP]
+        *vectors.values(), strict=True
     ):
         # Map the values
         rule = ParentalControlRule(
             mac=safe_return(rule_mac),
-            name=safe_return(rule_name),
-            timemap=safe_return(rule_timemap),
+            name=rule_name,
+            timemap=rule_timemap,
             type=PCRuleType(safe_int(rule_type, default=-999)),
         )
 
@@ -283,7 +316,10 @@ def write_pc_rules(rules: dict[str, ParentalControlRule]) -> dict[str, str]:
     data = {}
     for key, attribute in PC_RULE_MAP.items():
         data[key] = ">".join(
-            str(getattr(rule, attribute, "")) for rule in rules.values()
+            str(value)
+            if (value := getattr(rule, attribute, "")) is not None
+            else ""
+            for rule in rules.values()
         )
 
     data[KEY_PC_TIMEMAP] = data[KEY_PC_TIMEMAP].replace("&#60", "<")

@@ -659,9 +659,15 @@ class AsusRouter:
             firmware = self._state[AsusData.FIRMWARE].data
             if firmware and firmware["state"] is True:
                 # Get release notes
-                release_note = await self.async_get_data(
-                    AsusData.FIRMWARE_NOTE, force=True
-                )
+                try:
+                    release_note = await self.async_get_data(
+                        AsusData.FIRMWARE_NOTE, force=True
+                    )
+                except (AsusRouterConnectionError, AsusRouterDataError) as ex:
+                    _LOGGER.warning(
+                        "Unable to fetch firmware release notes: %s", ex
+                    )
+                    return
                 if release_note:
                     firmware.update(release_note)
 
@@ -972,7 +978,12 @@ class AsusRouter:
     async def async_get_data(  # noqa: C901, PLR0912, PLR0915
         self, datatype: AsusData, force: bool = False, **kwargs: Any
     ) -> Any:
-        """Get data from the device."""
+        """Get data from the device.
+
+        Forced reads raise on connection or data errors instead of returning
+        cached data. A response omitting the requested datatype is also an
+        error for a forced read.
+        """
 
         # --- V2 COMPATIBILITY ---
         # This small switcher will allow gradual switching from v1 to v2 logic
@@ -1017,22 +1028,22 @@ class AsusRouter:
         # Mark the data as active
         self._state[datatype].start()
 
-        # Check prerequisites
-        await self._check_prerequisites(datatype)
-
-        # Get the data finder
-        data_finder = self._where_to_get_data(datatype)
-
-        # Check if we have a data finder
-        if not data_finder:
-            _LOGGER.debug("No data finder for %s", datatype)
-            return {}
-
-        # The data we are looking for
-        data = {}
-        result: dict[AsusData, Any] = {}
-
         try:
+            # Check prerequisites
+            await self._check_prerequisites(datatype)
+
+            # Get the data finder
+            data_finder = self._where_to_get_data(datatype)
+
+            # Check if we have a data finder
+            if not data_finder:
+                _LOGGER.debug("No data finder for %s", datatype)
+                return {}
+
+            # The data we are looking for
+            data = {}
+            result: dict[AsusData, Any] = {}
+
             for endpoint in data_finder.endpoint:
                 # Get the data from the endpoint
                 request = "hook=" if endpoint == Endpoint.HOOK else ""
@@ -1085,6 +1096,11 @@ class AsusRouter:
                 if result and data_finder.merge == AsusDataMerge.ANY:
                     break
 
+            if force and datatype not in result:
+                raise AsusRouterDataError(
+                    f"Response omitted requested data: {datatype}"
+                )
+
             # Save the data state
             for key, value in result.items():
                 # Transform data if needed
@@ -1096,7 +1112,12 @@ class AsusRouter:
                     self._state[key] = AsusDataState()
                 self._state[key].update(transformed_value)
         except (AsusRouterConnectionError, AsusRouterDataError):
+            if force:
+                raise
             return self._return_state(datatype, **kwargs)
+        finally:
+            # Failed, cancelled or omitted updates must also release waiters.
+            self._state[datatype].stop()
 
         # Check flags
         await self._check_flags()

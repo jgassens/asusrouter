@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import logging
 from typing import Any
 
+from asusrouter.error import AsusRouterDataError
 from asusrouter.modules.aura import process_aura
 from asusrouter.modules.connection import ConnectionState, ConnectionStatus
 from asusrouter.modules.data import AsusData, AsusDataState
@@ -14,6 +15,7 @@ from asusrouter.modules.endpoint import data_get
 from asusrouter.modules.endpoint.error import AccessError
 from asusrouter.modules.led import AsusLED
 from asusrouter.modules.parental_control import (
+    HOOK_PC,
     KEY_PC_BLOCK_ALL,
     KEY_PC_STATE,
     AsusBlockAll,
@@ -134,7 +136,7 @@ def process(data: dict[str, Any]) -> dict[AsusData, Any]:  # noqa: C901, PLR0912
         state[AsusData.OPENVPN_SERVER] = process_openvpn_server(data)
 
     # Parental control
-    if KEY_PC_STATE in data:
+    if any(key in data for key in HOOK_PC):
         state[AsusData.PARENTAL_CONTROL] = process_parental_control(data)
 
     # Port forwarding
@@ -361,7 +363,10 @@ def process_parental_control(data: dict[str, Any]) -> dict[str, Any]:
     )
 
     # Rules
-    parental_control["rules"] = read_pc_rules(data)
+    try:
+        parental_control["rules"] = read_pc_rules(data)
+    except AsusRouterDataError as ex:
+        _LOGGER.warning("Parental control rules unavailable: %s", ex)
 
     return parental_control
 
