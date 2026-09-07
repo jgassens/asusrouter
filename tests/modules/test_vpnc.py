@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest import mock
 
@@ -470,3 +471,39 @@ def test_find_vpnc_unit(
 
     # Check the result
     assert result == expected_result
+
+
+@pytest.mark.asyncio
+async def test_set_state_vpnc_log_omits_clientlist(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The client list carries VPN credentials and must stay out of logs."""
+
+    secret = "S3NT1NEL-VPN-PASSWORD"
+    clientlist = f"<1>vpn>user>{secret}>"
+    callback = mock.AsyncMock(return_value=True)
+    router_state = {
+        AsusData.VPNC_CLIENTLIST: AsusDataState(data=clientlist),
+    }
+
+    with (
+        mock.patch("asusrouter.modules.vpnc.get_arguments", return_value=1),
+        mock.patch(
+            "asusrouter.modules.vpnc._get_argument_clientlist",
+            return_value=clientlist,
+        ),
+        mock.patch.dict(
+            "asusrouter.modules.vpnc.VPNC_STATE_MAPPING",
+            values={AsusVPNC.ON: ("restart_vpnc", 1)},
+        ),
+        caplog.at_level(logging.DEBUG),
+    ):
+        assert await set_state_vpnc(
+            callback, state=AsusVPNC.ON, router_state=router_state
+        )
+
+    assert secret not in caplog.text
+    assert "vpnc_clientlist" in caplog.text
+    assert callback.await_args.kwargs["arguments"]["vpnc_clientlist"] == (
+        clientlist
+    )

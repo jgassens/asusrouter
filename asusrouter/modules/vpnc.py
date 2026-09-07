@@ -124,9 +124,9 @@ async def set_state_vpnc(
     service_arguments["vpnc_clientlist"] = vpnc_clientlist
 
     _LOGGER.debug(
-        "Triggering state set with parameters: service=%s, arguments=%s",
+        "Triggering state set: service=%s, argument keys=%s",
         service,
-        service_arguments,
+        sorted(service_arguments),
     )
 
     # Call the service

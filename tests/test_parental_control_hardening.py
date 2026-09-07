@@ -537,3 +537,56 @@ async def test_rule_write_preserves_remaining_table(
     callback.assert_awaited_once_with(
         service="restart_firewall", arguments=expected, apply=True
     )
+
+
+@pytest.mark.parametrize("write_result", [False, True])
+async def test_set_rule_does_not_mutate_cached_rules(
+    write_result: bool,
+) -> None:
+    """The cached table must not change until a fetch replaces it."""
+
+    keep = ParentalControlRule(mac="00:11:22:33:44:55", type=PCRuleType.BLOCK)
+    cached = {keep.mac: keep}
+    router_state = {
+        AsusData.PARENTAL_CONTROL: AsusDataState(
+            data={"rules": cached}, inactive_event=asyncio.Event()
+        )
+    }
+    callback = AsyncMock(return_value=write_result)
+    new_rule = ParentalControlRule(
+        mac="AA:BB:CC:DD:EE:FF", type=PCRuleType.BLOCK
+    )
+
+    assert (
+        await set_rule(callback, new_rule, router_state=router_state)
+        is write_result
+    )
+
+    callback.assert_awaited_once()
+    written = callback.await_args.kwargs["arguments"][KEY_PC_MAC]
+    assert new_rule.mac in written
+    assert cached == {keep.mac: keep}
+    assert cached[keep.mac] is keep
+
+
+async def test_set_rule_refuses_invalidated_cache() -> None:
+    """A table marked stale cannot seed a whole-table write."""
+
+    keep = ParentalControlRule(mac="00:11:22:33:44:55", type=PCRuleType.BLOCK)
+    state = AsusDataState(
+        data={"rules": {keep.mac: keep}}, inactive_event=asyncio.Event()
+    )
+    state.invalidate()
+    callback = AsyncMock(return_value=True)
+
+    assert (
+        await set_rule(
+            callback,
+            ParentalControlRule(
+                mac="AA:BB:CC:DD:EE:FF", type=PCRuleType.BLOCK
+            ),
+            router_state={AsusData.PARENTAL_CONTROL: state},
+        )
+        is False
+    )
+    callback.assert_not_awaited()

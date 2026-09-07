@@ -253,7 +253,15 @@ async def set_rule(
             "Cannot set parental control rule without a known rules dict"
         )
         return False
-    current_rules = data["rules"]
+    if getattr(parental_control, "invalidated", False):
+        _LOGGER.error(
+            "Cannot set parental control rule from a stale rule table; "
+            "fetch the current rules first"
+        )
+        return False
+    # Work on a copy: the cached table must only ever change through a
+    # fetch, never through a write that the router may still reject.
+    current_rules = dict(data["rules"])
 
     # Get rule action
     # If the rule is not available, we need to add it
