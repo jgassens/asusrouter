@@ -33,6 +33,7 @@ from asusrouter.error import (
     AsusRouterAccessError,
     AsusRouterConnectionError,
     AsusRouterDataError,
+    AsusRouterError,
 )
 from asusrouter.modules.attributes import AsusRouterAttribute
 from asusrouter.modules.data import AsusData, AsusDataState
@@ -1234,7 +1235,18 @@ class AsusRouter:
             if _datatype in (AsusData.VPNC, AsusData.AURA):
                 # The only way to make it work with VPN Fusion
                 await asyncio.sleep(1)
-                await self._async_check_state_dependency(state)
+                try:
+                    await self._async_check_state_dependency(state)
+                except AsusRouterError as ex:
+                    # The write itself succeeded. A failed refresh of
+                    # the dependent state must not report it as failed.
+                    _LOGGER.warning(
+                        "State `%s` was set, but refreshing `%s` "
+                        "afterwards failed: %s",
+                        state,
+                        _datatype,
+                        ex,
+                    )
             elif (
                 get_enum_key_by_value(
                     AsusState, type(state), default=AsusState.NONE

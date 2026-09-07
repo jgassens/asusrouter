@@ -225,6 +225,25 @@ async def test_state_write_requires_successful_dependency_refresh(
     callback.assert_not_awaited()
 
 
+@pytest.mark.parametrize("state", [AsusVPNC.ON, AsusAura.ON])
+async def test_state_write_survives_failed_post_write_refresh(
+    pc_router: AsusRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    state: AsusVPNC | AsusAura,
+) -> None:
+    """A successful write is not failed by the refresh that follows it."""
+
+    dependency = AsyncMock(side_effect=[None, AsusRouterDataError()])
+    monkeypatch.setattr(pc_router, "_async_check_state_dependency", dependency)
+    monkeypatch.setattr(
+        "asusrouter.asusrouter.set_state", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr("asusrouter.asusrouter.asyncio.sleep", AsyncMock())
+
+    assert await pc_router.async_set_state(state) is True
+    assert dependency.await_count == 2
+
+
 @pytest.mark.parametrize(
     "data",
     [{KEY_PC_STATE: "1"}, {KEY_PC_BLOCK_ALL: "1"}],
