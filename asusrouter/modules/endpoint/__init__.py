@@ -101,6 +101,7 @@ SENSITIVE_ENDPOINTS: Final[frozenset[EndpointType]] = frozenset(
     {
         EndpointService.LOGIN,
         EndpointControl.APPLY,
+        EndpointControl.COMMAND,
     }
 )
 

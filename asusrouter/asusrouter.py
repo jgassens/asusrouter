@@ -446,7 +446,9 @@ class AsusRouter:
             payload = payload[:-1]
 
         _LOGGER.debug(
-            "Triggered method async_api_query: %s | %s", endpoint, payload
+            "Querying endpoint `%s` with payload length %d",
+            endpoint,
+            len(payload) if payload else 0,
         )
 
         request_type = ENDPOINT_FORCE_REQUEST.get(endpoint, RequestType.POST)
@@ -492,8 +494,12 @@ class AsusRouter:
             result = read(endpoint, content, config=self.config)
         except json.JSONDecodeError as ex:
             # Not like this is supposed to happen, but just in case
-            _LOGGER.debug("Failed to read content from %s", endpoint)
-            _LOGGER.debug("Content: %s", content)
+            _LOGGER.debug(
+                "Failed to decode response from endpoint `%s` with "
+                "JSONDecodeError; body length: %d",
+                endpoint,
+                len(content),
+            )
             # Just repeat request once more and see what happens
             # Only if we haven't tried already
             if not retry:
@@ -515,7 +521,11 @@ class AsusRouter:
         Hooks are used to fetch data from the device.
         """
 
-        _LOGGER.debug("Triggered method async_api_hook: %s", request)
+        _LOGGER.debug(
+            "Querying endpoint `%s` via async_api_hook with request length %d",
+            Endpoint.HOOK,
+            len(request),
+        )
 
         return await self.async_api_load(
             endpoint=Endpoint.HOOK,
@@ -530,7 +540,10 @@ class AsusRouter:
         """Send a command to the device."""
 
         _LOGGER.debug(
-            "Triggered method async_api_command: %s | %s", endpoint, commands
+            "Sending async_api_command to endpoint `%s` with %d command "
+            "field(s)",
+            endpoint,
+            len(commands) if commands else 0,
         )
 
         return await self.async_api_load(
@@ -1027,9 +1040,9 @@ class AsusRouter:
                 seconds=self._cache_time
             ):
                 _LOGGER.debug(
-                    "Using cached data for `%s`: %s",
+                    "Using cached data for `%s` with object type `%s`",
                     datatype,
-                    self._state[datatype].data,
+                    type(self._state[datatype].data).__name__,
                 )
                 # Return the cached data
                 return self._state[datatype].data
@@ -1261,9 +1274,11 @@ class AsusRouter:
         _LOGGER.debug("Triggered method async_set_state")
 
         _LOGGER.debug(
-            "Setting state `%s` with arguments `%s`. Expecting modify: `%s`",
-            state,
-            kwargs,
+            "Setting state for datatype `%s` using state type `%s` with %d "
+            "argument(s). Expecting modify: `%s`",
+            get_datatype(state),
+            type(state).__name__,
+            len(kwargs),
             expect_modify,
         )
 

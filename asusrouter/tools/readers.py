@@ -207,10 +207,10 @@ def read_json_content(content: str | None, **kwargs: Any) -> dict[str, Any]:
         return {}
     except json.JSONDecodeError as ex:
         _LOGGER.error(
-            "Unable to decode json content with exception `%s`.\
-                Please, copy this and fill in a bug report: %s",
+            "read_json_content failed with JSONDecodeError for body of "
+            "length %d: %s",
+            len(content),
             ex,
-            content,
         )
         return {}
 

@@ -21,6 +21,7 @@ class TestConnectionLogging:
 
     LOGIN_ENDPOINT = EndpointService.LOGIN
     SENSITIVE_ENDPOINT = EndpointControl.APPLY
+    COMMAND_ENDPOINT = EndpointControl.COMMAND
     SAFE_ENDPOINT = EndpointService.LOGOUT
 
     @pytest.mark.asyncio
@@ -29,6 +30,7 @@ class TestConnectionLogging:
         [
             # STRICT: never log payloads
             (ARSecurityLevel.STRICT, SAFE_ENDPOINT, "not-a-secret", None),
+            (ARSecurityLevel.STRICT, COMMAND_ENDPOINT, "secret", None),
             # Login: never log payload even in unsafe mode
             (ARSecurityLevel.UNSAFE, LOGIN_ENDPOINT, "top-secret", None),
             # DEFAULT: non-sensitive
@@ -40,6 +42,7 @@ class TestConnectionLogging:
             ),
             # DEFAULT: sensitive
             (ARSecurityLevel.DEFAULT, SENSITIVE_ENDPOINT, "secret", None),
+            (ARSecurityLevel.DEFAULT, COMMAND_ENDPOINT, "secret", None),
             # SANITIZED: non-sensitive
             (
                 ARSecurityLevel.SANITIZED,
@@ -54,6 +57,12 @@ class TestConnectionLogging:
                 "secret",
                 "[SANITIZED PLACEHOLDER]",
             ),
+            (
+                ARSecurityLevel.SANITIZED,
+                COMMAND_ENDPOINT,
+                "secret",
+                "[SANITIZED PLACEHOLDER]",
+            ),
             # UNSAFE: non-sensitive
             (
                 ARSecurityLevel.UNSAFE,
@@ -63,6 +72,7 @@ class TestConnectionLogging:
             ),
             # UNSAFE: sensitive
             (ARSecurityLevel.UNSAFE, SENSITIVE_ENDPOINT, "secret", "secret"),
+            (ARSecurityLevel.UNSAFE, COMMAND_ENDPOINT, "secret", "secret"),
             # Empty payload
             (ARSecurityLevel.DEFAULT, SAFE_ENDPOINT, "", None),
             # None payload
@@ -70,13 +80,17 @@ class TestConnectionLogging:
         ],
         ids=[
             "strict",
+            "strict_command",
             "login",
             "default_safe",
             "default_sensitive",
+            "default_command",
             "sanitized_safe",
             "sanitized_sensitive",
+            "sanitized_command",
             "unsafe_safe",
             "unsafe_sensitive",
+            "unsafe_command",
             "empty_payload",
             "none_payload",
         ],

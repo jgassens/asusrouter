@@ -80,15 +80,10 @@ async def async_call_service(
         run_service = result.get("run_service", None)
         if run_service != service:
             raise AsusRouterServiceError(
-                f"Service not run. Raw result: {result}"
+                "Service not run. "
+                f"Requested service: `{service}`; "
+                f"returned service: `{run_service}`"
             )
-
-    _LOGGER.debug(
-        "Service `%s` run with arguments `%s`. Result: `%s`",
-        service,
-        arguments,
-        result,
-    )
 
     last_id = result.get("id") or arguments.get("id")
     last_id = safe_int(last_id)
@@ -101,9 +96,19 @@ async def async_call_service(
 
     # Special services that won't return any result
     if arguments.get("action_mode") == "update_client_list":
-        return (True, needed_time, last_id)
+        success = True
+    elif expect_modify:
+        success = safe_bool(result.get("modify")) or False
+    else:
+        success = True
 
-    if expect_modify:
-        return (safe_bool(result.get("modify")) or False, needed_time, last_id)
+    _LOGGER.debug(
+        "Service `%s` completed with %d argument(s). "
+        "Success: `%s`. Needed time: `%s`",
+        service,
+        len(arguments),
+        success,
+        needed_time,
+    )
 
-    return (True, needed_time, last_id)
+    return (success, needed_time, last_id)
