@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -60,7 +60,15 @@ class AsusDataState:
     data: Any | None = None
     timestamp: datetime = datetime.now(UTC)
     active: bool = False
-    inactive_event: asyncio.Event = asyncio.Event()
+    inactive_event: asyncio.Event = field(default_factory=asyncio.Event)
+    invalidated: bool = False
+    generation: int = 0
+
+    def invalidate(self) -> None:
+        """Keep last-known data but mark it and in-flight fetches stale."""
+
+        self.invalidated = True
+        self.generation += 1
 
     def start(self) -> None:
         """Set to active."""
@@ -78,6 +86,7 @@ class AsusDataState:
         """Update the state."""
 
         self.data = data
+        self.invalidated = False
         # Set timestamp to the current utc time
         self.timestamp = datetime.now(UTC)
         # Set to inactive
@@ -102,7 +111,11 @@ class AsusDataState:
         self.data = {"state": state}
 
     def offset_time(self, offset: int | None) -> None:
-        """Offset the timestamp."""
+        """Offset the timestamp unless the whole datatype needs a refresh."""
+
+        # A scalar state save cannot establish freshness of the whole table.
+        if self.invalidated:
+            return
 
         if offset is None:
             self.timestamp = datetime.now(UTC)

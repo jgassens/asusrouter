@@ -66,6 +66,7 @@ from asusrouter.modules.endpoint.error import AccessError
 from asusrouter.modules.firmware import Firmware
 from asusrouter.modules.flags import Flag
 from asusrouter.modules.identity import AsusDevice, collect_identity
+from asusrouter.modules.parental_control import HOOK_PC
 from asusrouter.modules.port_forwarding import PortForwardingRule
 from asusrouter.modules.service import ServiceResult, async_call_service
 from asusrouter.modules.source import (
@@ -983,7 +984,7 @@ class AsusRouter:
 
         Forced reads raise on connection or data errors instead of returning
         cached data. A response omitting the requested datatype is also an
-        error for a forced read.
+        error for a forced read, as is invalidation during the fetch.
         """
 
         # --- V2 COMPATIBILITY ---
@@ -1012,7 +1013,11 @@ class AsusRouter:
                 )
 
         # Check if we have the data already and not forcing a refresh
-        if self._state[datatype].data and not force:
+        if (
+            self._state[datatype].data
+            and not force
+            and not self._state[datatype].invalidated
+        ):
             # Check if the data is younger than the cache time
             if datetime.now(UTC) - self._state[datatype].timestamp < timedelta(
                 seconds=self._cache_time
@@ -1044,6 +1049,12 @@ class AsusRouter:
             # The data we are looking for
             data = {}
             result: dict[AsusData, Any] = {}
+
+            # Endpoints may return multiple datatypes. Keep one snapshot for
+            # the entire fetch so no pre-invalidation response can be saved.
+            generations = {
+                key: state.generation for key, state in self._state.items()
+            }
 
             for endpoint in data_finder.endpoint:
                 # Get the data from the endpoint
@@ -1097,6 +1108,11 @@ class AsusRouter:
                 if result and data_finder.merge == AsusDataMerge.ANY:
                     break
 
+            if self._state[datatype].generation != generations[datatype]:
+                raise AsusRouterDataError(
+                    f"Data invalidated during fetch: {datatype}"
+                )
+
             if force and datatype not in result:
                 raise AsusRouterDataError(
                     f"Response omitted requested data: {datatype}"
@@ -1104,6 +1120,10 @@ class AsusRouter:
 
             # Save the data state
             for key, value in result.items():
+                if key in self._state and self._state[
+                    key
+                ].generation != generations.get(key, 0):
+                    continue
                 # Transform data if needed
                 transformed_value = self._transform_data(key, value)
                 # Save the data
@@ -1158,10 +1178,20 @@ class AsusRouter:
             expect_modify,
         )
 
+        result = ServiceResult(success, needed_time, last_id)
+        if (
+            result.success is True
+            and arguments
+            and any(key in arguments for key in HOOK_PC)
+        ):
+            # Invalidate before any further await, including connection drop.
+            self._check_state(AsusData.PARENTAL_CONTROL)
+            self._state[AsusData.PARENTAL_CONTROL].invalidate()
+
         if drop_connection:
             await self._async_drop_connection()
 
-        return ServiceResult(success, needed_time, last_id)
+        return result
 
     async def async_run_service(
         self,
