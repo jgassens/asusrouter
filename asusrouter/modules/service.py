@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 import logging
 from typing import Any
 
@@ -10,6 +11,35 @@ from asusrouter.error import AsusRouterServiceError
 from asusrouter.tools.converters import safe_bool, safe_int
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ServiceResult:
+    """Result of a service call, including call-local metadata."""
+
+    success: bool
+    needed_time: int | None
+    last_id: int | None
+
+
+def _safe_needed_time(value: Any) -> int | None:
+    """Convert a router-provided service delay to a valid duration."""
+
+    if isinstance(value, bool):
+        return None
+
+    if isinstance(value, (int, float)) and value < 0:
+        return None
+
+    try:
+        needed_time = safe_int(value)
+    except OverflowError:
+        return None
+
+    if needed_time is None or needed_time < 0:
+        return None
+
+    return needed_time
 
 
 async def async_call_service(
@@ -63,7 +93,7 @@ async def async_call_service(
     last_id = result.get("id") or arguments.get("id")
     last_id = safe_int(last_id)
 
-    needed_time = safe_int(result.get("restart_needed_time"))
+    needed_time = _safe_needed_time(result.get("restart_needed_time"))
     # For all the services with setting ID we better wait
     # before we will get actual state change
     if needed_time is None and last_id is not None:

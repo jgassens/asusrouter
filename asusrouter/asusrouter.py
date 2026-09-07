@@ -67,7 +67,7 @@ from asusrouter.modules.firmware import Firmware
 from asusrouter.modules.flags import Flag
 from asusrouter.modules.identity import AsusDevice, collect_identity
 from asusrouter.modules.port_forwarding import PortForwardingRule
-from asusrouter.modules.service import async_call_service
+from asusrouter.modules.service import ServiceResult, async_call_service
 from asusrouter.modules.source import (
     ARDataCollection,
     ARDataSource,
@@ -1138,6 +1138,31 @@ class AsusRouter:
     # Service-related methods -->
     # ---------------------------
 
+    async def async_run_service_result(
+        self,
+        service: str | None,
+        arguments: dict[str, Any] | None = None,
+        apply: bool = False,
+        expect_modify: bool = True,
+        drop_connection: bool = False,
+    ) -> ServiceResult:
+        """Run a service and return its call-local result metadata."""
+
+        _LOGGER.debug("Triggered method async_run_service_result")
+
+        success, needed_time, last_id = await async_call_service(
+            self.async_api_command,
+            service,
+            arguments,
+            apply,
+            expect_modify,
+        )
+
+        if drop_connection:
+            await self._async_drop_connection()
+
+        return ServiceResult(success, needed_time, last_id)
+
     async def async_run_service(
         self,
         service: str | None,
@@ -1150,19 +1175,17 @@ class AsusRouter:
 
         _LOGGER.debug("Triggered method async_run_service")
 
-        # Run the service
-        result, self._needed_time, self._last_id = await async_call_service(
-            self.async_api_command,
+        result = await self.async_run_service_result(
             service,
             arguments,
             apply,
             expect_modify,
+            drop_connection,
         )
+        self._needed_time = result.needed_time
+        self._last_id = result.last_id
 
-        if drop_connection:
-            await self._async_drop_connection()
-
-        return result
+        return result.success
 
     async def _async_check_state_dependency(self, state: AsusState) -> None:
         """Check and queue state dependencies. Required for some states."""
