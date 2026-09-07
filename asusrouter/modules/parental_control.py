@@ -21,6 +21,13 @@ KEY_PC_STATE = "MULTIFILTER_ALL"
 KEY_PC_TIMEMAP = "MULTIFILTER_MACFILTER_DAYTIME_V2"
 KEY_PC_TYPE = "MULTIFILTER_ENABLE"
 
+KEY_PC_MAX_RULES = "MaxRule_parentctrl"
+KEY_PC_MAX_ENTRIES = "MaxRule_PC_DAYTIME"
+KEY_PC_SCHED_VERSION = "PC_SCHED_V3"
+
+DEFAULT_PC_MAX_RULES = 16
+DEFAULT_PC_MAX_ENTRIES = 128
+
 PC_RULE_MAP = {
     KEY_PC_MAC: "mac",
     KEY_PC_NAME: "name",
@@ -41,6 +48,19 @@ HOOK_PC = [
 DEFAULT_PC_TIMEMAP = "W03E21000700<W04122000800"
 
 
+@dataclass(frozen=True)
+class ParentalControlCapabilities:
+    """Router-advertised parental-control limits and schedule version."""
+
+    max_rules: int | None = None
+    max_entries: int | None = None
+    sched_version: int | None = None
+
+
+class ParentalControlCapacityError(ValueError):
+    """Raised when a parental-control update exceeds a capacity limit."""
+
+
 class PCRuleType(IntEnum):
     """Parental control rule type."""
 
@@ -59,6 +79,97 @@ class ParentalControlRule:
     name: str | None = ""
     timemap: str | None = DEFAULT_PC_TIMEMAP
     type: PCRuleType = PCRuleType.UNKNOWN
+
+
+def _read_positive_int(value: Any) -> int | None:
+    """Return a positive integer from a supported router value."""
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.isdecimal():
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    return None
+
+
+def read_pc_capabilities(data: dict[str, Any]) -> ParentalControlCapabilities:
+    """Read parental-control capabilities from UI support data."""
+
+    return ParentalControlCapabilities(
+        max_rules=_read_positive_int(data.get(KEY_PC_MAX_RULES)),
+        max_entries=_read_positive_int(data.get(KEY_PC_MAX_ENTRIES)),
+        sched_version=_read_positive_int(data.get(KEY_PC_SCHED_VERSION)),
+    )
+
+
+def count_pc_rule_entries(
+    rules: dict[str, ParentalControlRule],
+) -> tuple[int, int]:
+    """Count rule rows and raw non-empty schedule segments."""
+
+    window_count = 0
+    for rule in rules.values():
+        if rule.timemap:
+            timemap = rule.timemap.replace("&#60", "<")
+            window_count += sum(
+                bool(segment) for segment in timemap.split("<")
+            )
+
+    return len(rules), window_count
+
+
+def validate_pc_capacity(
+    current_rules: dict[str, ParentalControlRule],
+    proposed_rules: dict[str, ParentalControlRule],
+    capabilities: ParentalControlCapabilities,
+) -> None:
+    """Reject only updates that grow a table beyond a capacity limit."""
+
+    current_counts = count_pc_rule_entries(current_rules)
+    proposed_counts = count_pc_rule_entries(proposed_rules)
+    dimensions = (
+        (
+            "rules",
+            current_counts[0],
+            proposed_counts[0],
+            capabilities.max_rules,
+            DEFAULT_PC_MAX_RULES,
+            KEY_PC_MAX_RULES,
+        ),
+        (
+            "schedule windows",
+            current_counts[1],
+            proposed_counts[1],
+            capabilities.max_entries,
+            DEFAULT_PC_MAX_ENTRIES,
+            KEY_PC_MAX_ENTRIES,
+        ),
+    )
+
+    for (
+        dimension,
+        current,
+        proposed,
+        advertised,
+        fallback,
+        router_key,
+    ) in dimensions:
+        limit = advertised if advertised is not None else fallback
+        if proposed <= current or proposed <= limit:
+            continue
+
+        source = (
+            router_key
+            if advertised is not None
+            else "assumed because the router did not report it"
+        )
+        raise ParentalControlCapacityError(
+            "Parental-control update would increase "
+            f"{dimension} from {current} to {proposed}; "
+            f"router limit is {limit} ({source})."
+        )
 
 
 class AsusParentalControl(IntEnum):

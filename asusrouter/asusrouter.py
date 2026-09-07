@@ -66,7 +66,11 @@ from asusrouter.modules.endpoint.error import AccessError
 from asusrouter.modules.firmware import Firmware
 from asusrouter.modules.flags import Flag
 from asusrouter.modules.identity import AsusDevice, collect_identity
-from asusrouter.modules.parental_control import HOOK_PC
+from asusrouter.modules.parental_control import (
+    HOOK_PC,
+    ParentalControlCapabilities,
+    read_pc_capabilities,
+)
 from asusrouter.modules.port_forwarding import PortForwardingRule
 from asusrouter.modules.service import ServiceResult, async_call_service
 from asusrouter.modules.source import (
@@ -1330,6 +1334,17 @@ class AsusRouter:
     # ---------------------------
     # <-- Service-related methods
     # ---------------------------
+
+    async def async_get_parental_control_capabilities(
+        self,
+    ) -> ParentalControlCapabilities:
+        """Get router-advertised parental-control capabilities."""
+
+        response = await self.async_api_hook("get_ui_support()")
+        ui_support = response.get("get_ui_support")
+        return read_pc_capabilities(
+            ui_support if isinstance(ui_support, dict) else {}
+        )
 
     # ---------------------------
     # Static DHCP methods -->
