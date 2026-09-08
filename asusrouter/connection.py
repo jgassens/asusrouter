@@ -260,14 +260,13 @@ class Connection:  # pylint: disable=too-many-instance-attributes
                 self._connect_task = asyncio.create_task(
                     self._async_connect_with_lock(lock)
                 )
+            task = self._connect_task
 
         try:
             # Await the in-flight connect but don't cancel it on
             # outer timeout: use shield so that callers timing out
             # won't cancel the actual attempt.
-            await asyncio.wait_for(
-                asyncio.shield(self._connect_task), timeout=timeout
-            )
+            await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
             return True
         except TimeoutError:
             if not block_error:
@@ -276,14 +275,16 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             # and satisfy future callers
             return False
         except asyncio.CancelledError:
-            # Underlying connect was cancelled (e.g. by fallback).
-            # Treat as failed.
+            # Only an inner cancellation is a failed connect attempt.
+            # Cancellation of this caller must propagate through the shield.
+            if not task.cancelled():
+                raise
             if not block_error:
                 _LOGGER.debug("Connection attempt was cancelled")
             return False
         finally:
-            # If the task finished, clear it to allow future retries.
-            if self._connect_task is not None and self._connect_task.done():
+            # Do not clear a replacement task started by fallback.
+            if self._connect_task is task and task.done():
                 self._connect_task = None
 
     async def _async_connect_with_lock(
@@ -541,7 +542,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
                 f"Cannot connect to `{self._hostname}` on port "
                 f"`{self.port}`. Failed in `_send_request` with error: `{ex}`"
             ) from ex
-        except (TimeoutError, asyncio.CancelledError) as ex:
+        except TimeoutError as ex:
             raise AsusRouterTimeoutError(
                 f"Data cannot be retrieved due to an asyncio error. "
                 f"Connection failed: {ex}"
@@ -691,9 +692,11 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         # awaiting the old (failing) task until its timeout.
         old_task: asyncio.Task | None = None
         async with self._connect_task_lock:
+            inside_connect = self._connect_task is asyncio.current_task()
             if (
                 self._connect_task is not None
                 and not self._connect_task.done()
+                and not inside_connect
             ):
                 _LOGGER.debug(
                     "Cancelling in-flight connect attempt to "
@@ -722,12 +725,13 @@ class Connection:  # pylint: disable=too-many-instance-attributes
                     exc,
                 )
 
-        # Reset connection state and perform a bounded reconnect
-        # for the fallback.
+        # A login already in progress will retry with the new parameters.
+        # Other requests need a bounded reconnect before their retry.
         self.reset_connection()
-        await self.async_connect(
-            t_overwrite=DEFAULT_TIMEOUT_FALLBACK, block_error=True
-        )
+        if not inside_connect:
+            await self.async_connect(
+                t_overwrite=DEFAULT_TIMEOUT_FALLBACK, block_error=True
+            )
 
     async def async_query(
         self,
@@ -773,8 +777,9 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             # We will create a new session and retry the request
             self.reset_connection()
             self._session = self._new_session()
-            # Reconnect
-            await self.async_connect()
+            # A login must retry directly instead of awaiting its own task.
+            if asyncio.current_task() is not self._connect_task:
+                await self.async_connect()
             # Retry the request
             return await self._make_request(
                 endpoint, payload, headers, request_type

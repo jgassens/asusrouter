@@ -104,9 +104,8 @@ SEND_REQUEST_CASES = [
         None,
         None,
         asyncio.CancelledError("operation cancelled"),
-        AsusRouterTimeoutError,
-        r"Data cannot be retrieved due to an asyncio error\. "
-        r"Connection failed: operation cancelled",
+        asyncio.CancelledError,
+        "operation cancelled",
     ),
 ]
 SEND_REQUEST_IDS = [

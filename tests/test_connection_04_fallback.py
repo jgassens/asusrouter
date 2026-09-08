@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import ssl
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock
 
+import aiohttp
 import pytest
 
 from asusrouter.connection import ConnectionFallback
@@ -173,6 +177,73 @@ CASES_FALLBACK = [
 
 class TestConnectionFallback:
     """Tests for the Connection class fallbacks."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("use_ssl", "port", "certificate_error", "expected_url"),
+        [
+            (False, CUSTOM_HTTP, False, "http://localhost:80/login.cgi"),
+            (True, CUSTOM_HTTPS, False, "https://localhost:8443/login.cgi"),
+            (True, DEFAULT_PORT_HTTPS, True, "http://localhost:80/login.cgi"),
+        ],
+        ids=["http_port", "https_port", "ssl_certificate"],
+    )
+    async def test_login_fallback_retries_once_without_self_cancellation(
+        self,
+        use_ssl: bool,
+        port: int,
+        certificate_error: bool,
+        expected_url: str,
+        connection_factory: ConnectionFactory,
+    ) -> None:
+        """Fallback during login keeps the only successful token and task."""
+
+        session = MagicMock(closed=False)
+        connection = connection_factory(
+            session=session,
+            use_ssl=use_ssl,
+            port=port,
+            config={
+                ARCCKey.ALLOW_FALLBACK: True,
+                ARCCKey.STRICT_SSL: False,
+                ARCCKey.VERIFY_SSL: True,
+            },
+        )
+        initial_url = f"{connection.webpanel}/login.cgi"
+        urls = []
+        login_tasks = []
+
+        def request(method: str, url: str, **kwargs: Any) -> AsyncMock:
+            urls.append(url)
+            login_tasks.append(asyncio.current_task())
+            if len(urls) == 1:
+                if certificate_error:
+                    raise ssl.SSLCertVerificationError("untrusted certificate")
+                raise aiohttp.ClientConnectorError(
+                    Mock(), OSError("unreachable port")
+                )
+            response = Mock(
+                status=200,
+                headers={},
+                text=AsyncMock(
+                    return_value=json.dumps(
+                        {"asus_token": f"token-{len(urls) - 1}"}
+                    )
+                ),
+            )
+            context = AsyncMock()
+            context.__aenter__.return_value = response
+            return context
+
+        session.request.side_effect = request
+        assert await connection.async_connect(t_overwrite=1) is True
+        assert urls == [initial_url, expected_url]
+        assert connection.connected
+        assert connection._token == "token-1"
+        assert connection._header["cookie"] == "asus_token=token-1"
+        assert login_tasks[0] is login_tasks[1]
+        assert login_tasks[0].cancelling() == 0
+        assert connection.config.get(ARCCKey.VERIFY_SSL) is True
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
