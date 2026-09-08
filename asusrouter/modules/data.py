@@ -92,15 +92,14 @@ class AsusDataState:
         # Set to inactive
         self.stop()
 
-    def update_state(self, state: Any, last_id: int | None = None) -> None:
+    def update_state(
+        self,
+        state: Any,
+        last_id: int | None = None,
+        *,
+        state_key: str = "state",
+    ) -> None:
         """Update a state variable in the data dict."""
-
-        # Import locally to keep the foundational data module acyclic.
-        from asusrouter.modules.parental_control import (  # noqa: PLC0415
-            AsusBlockAll,
-        )
-
-        state_key = "block_all" if isinstance(state, AsusBlockAll) else "state"
 
         # Convert the state if needed
         state = convert_state(state)

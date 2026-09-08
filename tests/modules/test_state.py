@@ -310,7 +310,9 @@ def test_save_state(state: AsusState, datatype: AsusData | None) -> None:
 
     # Check the calls to the AsusDataState methods
     if datatype is not None:
-        library[datatype].update_state.assert_called_once_with(state, None)
+        library[datatype].update_state.assert_called_once_with(
+            state, None, state_key="state"
+        )
         library[datatype].offset_time.assert_called_once_with(None)
 
 

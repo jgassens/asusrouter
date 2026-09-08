@@ -216,8 +216,12 @@ def save_state(
     if datatype is None or datatype not in library:
         return
 
-    # Save the state
-    library[datatype].update_state(state, last_id)
+    # Save the state under its key. Block-all lives beside the
+    # parental-control enabled flag instead of replacing it.
+    state_key = "state"
+    if isinstance(state, AsusState.BLOCK_ALL.value):
+        state_key = "block_all"
+    library[datatype].update_state(state, last_id, state_key=state_key)
     library[datatype].offset_time(needed_time)
 
 
