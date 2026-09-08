@@ -282,22 +282,39 @@ ASUSDATA_MAP: dict[AsusData, AsusData | AsusDataFinder] = {
 }
 
 
-def add_conditional_data_rule(data: AsusData, rule: AsusDataFinder) -> None:
-    """Add or change rule for ASUSDATA_MAP."""
+def add_conditional_data_rule(
+    data: AsusData,
+    rule: AsusDataFinder,
+    data_map: dict[AsusData, AsusData | AsusDataFinder] | None = None,
+) -> None:
+    """Add or change a rule in the given map, defaulting to ASUSDATA_MAP."""
 
-    ASUSDATA_MAP[data] = rule
+    if data_map is None:
+        data_map = ASUSDATA_MAP
+    data_map[data] = rule
     _LOGGER.debug("Added conditional data rule: %s -> %s", data, rule)
 
 
-def add_conditional_data_alias(data: AsusData, origin: AsusData) -> None:
-    """Add or change rule for ASUSDATA_MAP."""
+def add_conditional_data_alias(
+    data: AsusData,
+    origin: AsusData,
+    data_map: dict[AsusData, AsusData | AsusDataFinder] | None = None,
+) -> None:
+    """Add or change an alias in the given map, defaulting to ASUSDATA_MAP."""
 
-    ASUSDATA_MAP[data] = origin
+    if data_map is None:
+        data_map = ASUSDATA_MAP
+    data_map[data] = origin
     _LOGGER.debug("Added data alias: %s -> %s", origin, data)
 
 
-def remove_data_rule(data: AsusData) -> None:
-    """Remove rule for ASUSDATA_MAP."""
+def remove_data_rule(
+    data: AsusData,
+    data_map: dict[AsusData, AsusData | AsusDataFinder] | None = None,
+) -> None:
+    """Remove a rule from the given map, defaulting to ASUSDATA_MAP."""
 
-    ASUSDATA_MAP.pop(data, None)
+    if data_map is None:
+        data_map = ASUSDATA_MAP
+    data_map.pop(data, None)
     _LOGGER.debug("Removed data rule: %s", data)

@@ -84,42 +84,63 @@ AsusStateMap: dict[AsusState, AsusData | None] = {
 }
 
 
-def add_conditional_state(state: AsusState, data: AsusData) -> None:
-    """Add or change AsusStateMap."""
+def add_conditional_state(
+    state: AsusState,
+    data: AsusData,
+    state_map: dict[AsusState, AsusData | None] | None = None,
+) -> None:
+    """Add or change a state in the given map, defaulting to AsusStateMap."""
 
     if not isinstance(state, AsusState) or not isinstance(data, AsusData):
         _LOGGER.debug("Invalid state or data type: %s -> %s", state, data)
         return
 
-    AsusStateMap[state] = data
+    if state_map is None:
+        state_map = AsusStateMap
+    state_map[state] = data
     _LOGGER.debug("Added conditional state rule: %s -> %s", state, data)
 
 
-def get_datatype(state: Any | None) -> AsusData | None:
-    """Get the datatype."""
+def get_datatype(
+    state: Any | None,
+    state_map: dict[AsusState, AsusData | None] | None = None,
+) -> AsusData | None:
+    """Get the datatype from the given map, defaulting to AsusStateMap."""
 
     asus_state = get_enum_key_by_value(
         AsusState, type(state), default=AsusState.NONE
     )
 
-    return AsusStateMap.get(asus_state)
+    if state_map is None:
+        state_map = AsusStateMap
+    return state_map.get(asus_state)
 
 
-def _get_module_name(state: AsusState) -> str | None:
+def _get_module_name(
+    state: AsusState,
+    state_map: dict[AsusState, AsusData | None] | None = None,
+) -> str | None:
     """Get the module name."""
 
-    module_class = get_datatype(state)
+    module_class = (
+        get_datatype(state)
+        if state_map is None
+        else get_datatype(state, state_map=state_map)
+    )
     if module_class:
         return module_class.value
 
     return None
 
 
-def _get_module(state: AsusState) -> ModuleType | None:
+def _get_module(
+    state: AsusState,
+    state_map: dict[AsusState, AsusData | None] | None = None,
+) -> ModuleType | None:
     """Get the module."""
 
     # Module name
-    module_name = _get_module_name(state)
+    module_name = _get_module_name(state, state_map=state_map)
     if not module_name:
         return None
 
@@ -146,12 +167,14 @@ def _has_method(module: ModuleType, method: str) -> bool:
 async def set_state(
     callback: Callable[..., Awaitable[bool]],
     state: AsusState,
+    *,
+    state_map: dict[AsusState, AsusData | None] | None = None,
     **kwargs: Any,
 ) -> bool:
     """Set the state."""
 
     # Get the module
-    submodule = _get_module(state)
+    submodule = _get_module(state, state_map=state_map)
 
     # Process the data if module found
     if submodule and _has_method(submodule, "set_state"):
@@ -187,11 +210,13 @@ def save_state(
     library: dict[AsusData, AsusDataState],
     needed_time: int | None = None,
     last_id: int | None = None,
+    *,
+    state_map: dict[AsusState, AsusData | None] | None = None,
 ) -> None:
     """Save the state."""
 
     # Get the correct data key
-    datatype = get_datatype(state)
+    datatype = get_datatype(state, state_map=state_map)
     if datatype is None or datatype not in library:
         return
 
@@ -203,6 +228,8 @@ def save_state(
 async def keep_state(
     callback: Callable[..., Awaitable[Any]],
     states: AsusState | list[AsusState] | None,
+    *,
+    state_map: dict[AsusState, AsusData | None] | None = None,
     **kwargs: Any,
 ) -> None:
     """Keep the state."""
@@ -217,7 +244,7 @@ async def keep_state(
     awaitables = [
         submodule.keep_state(callback, state, **kwargs)
         for state in states
-        if (submodule := _get_module(state))
+        if (submodule := _get_module(state, state_map=state_map))
         and _has_method(submodule, "keep_state")
     ]
 

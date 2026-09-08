@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 import json
 import logging
@@ -83,6 +84,7 @@ from asusrouter.modules.source import (
 )
 from asusrouter.modules.state import (
     AsusState,
+    AsusStateMap,
     add_conditional_state,
     get_datatype,
     keep_state,
@@ -149,6 +151,8 @@ class AsusRouter:
 
         # Set the device identity
         self._identity: AsusDevice | None = None
+        self._data_map = deepcopy(ASUSDATA_MAP)
+        self._state_map = deepcopy(AsusStateMap)
         self._state: dict[AsusData, AsusDataState] = {}
         self._data_states: dict[ARDataSource | ARDataType, ARDataState] = {}
         self._static_dhcp_lock = asyncio.Lock()
@@ -272,6 +276,7 @@ class AsusRouter:
             await keep_state(
                 callback=self.async_run_service,
                 states=led_state.data["state"],
+                state_map=self._state_map,
                 identity=self._identity,
             )
 
@@ -332,16 +337,24 @@ class AsusRouter:
                 _LOGGER.debug("Adding conditional rules for stock firmware")
                 if fw_388 < firmware:
                     add_conditional_state(
-                        AsusState.OPENVPN_CLIENT, AsusData.VPNC
+                        AsusState.OPENVPN_CLIENT,
+                        AsusData.VPNC,
+                        state_map=self._state_map,
                     )
                     add_conditional_state(
-                        AsusState.WIREGUARD_CLIENT, AsusData.VPNC
+                        AsusState.WIREGUARD_CLIENT,
+                        AsusData.VPNC,
+                        state_map=self._state_map,
                     )
                     add_conditional_data_alias(
-                        AsusData.OPENVPN_CLIENT, AsusData.VPNC
+                        AsusData.OPENVPN_CLIENT,
+                        AsusData.VPNC,
+                        data_map=self._data_map,
                     )
                     add_conditional_data_alias(
-                        AsusData.WIREGUARD_CLIENT, AsusData.VPNC
+                        AsusData.WIREGUARD_CLIENT,
+                        AsusData.VPNC,
+                        data_map=self._data_map,
                     )
                     add_conditional_data_rule(
                         AsusData.OPENVPN_SERVER,
@@ -349,6 +362,7 @@ class AsusRouter:
                             Endpoint.HOOK,
                             nvram=ASUSDATA_NVRAM["openvpn_server_388"],
                         ),
+                        data_map=self._data_map,
                     )
             # Merlin
             else:
@@ -360,26 +374,35 @@ class AsusRouter:
                             Endpoint.HOOK,
                             nvram=ASUSDATA_NVRAM["vpnc"],
                         ),
+                        data_map=self._data_map,
                     )
             # Before 388
             if firmware < fw_388:
                 # Remove VPNC rules
-                remove_data_rule(AsusData.VPNC)
-                remove_data_rule(AsusData.VPNC_CLIENTLIST)
+                remove_data_rule(AsusData.VPNC, data_map=self._data_map)
+                remove_data_rule(
+                    AsusData.VPNC_CLIENTLIST, data_map=self._data_map
+                )
                 # Remove WireGuard rules
-                remove_data_rule(AsusData.WIREGUARD)
-                remove_data_rule(AsusData.WIREGUARD_CLIENT)
-                remove_data_rule(AsusData.WIREGUARD_SERVER)
+                remove_data_rule(AsusData.WIREGUARD, data_map=self._data_map)
+                remove_data_rule(
+                    AsusData.WIREGUARD_CLIENT, data_map=self._data_map
+                )
+                remove_data_rule(
+                    AsusData.WIREGUARD_SERVER, data_map=self._data_map
+                )
 
             # DSL connection
             if self._identity.dsl is False:
-                remove_data_rule(AsusData.DSL)
+                remove_data_rule(AsusData.DSL, data_map=self._data_map)
 
             # Ookla Speedtest
             if self._identity.ookla is False:
-                remove_data_rule(AsusData.SPEEDTEST)
+                remove_data_rule(AsusData.SPEEDTEST, data_map=self._data_map)
                 # remove_data_rule(AsusData.SPEEDTEST_HISTORY)
-                remove_data_rule(AsusData.SPEEDTEST_RESULT)
+                remove_data_rule(
+                    AsusData.SPEEDTEST_RESULT, data_map=self._data_map
+                )
                 # remove_data_rule(AsusData.SPEEDTEST_SERVERS)
 
         # Return new identity
@@ -570,30 +593,27 @@ class AsusRouter:
             return None
 
         # Get the map
-        data_map = ASUSDATA_MAP.get(datatype)
+        data_map = self._data_map.get(datatype)
         # Consider aliases
         while isinstance(data_map, AsusData):
-            data_map = ASUSDATA_MAP.get(data_map)
+            data_map = self._data_map.get(data_map)
         # Check if we have a map
         if not isinstance(data_map, AsusDataFinder):
             _LOGGER.debug("No map found for %s", datatype)
             return None
 
-        # Check if endpoints are available
-        for endpoint in data_map.endpoint.copy():
-            # Check endpoint availability in identity
-            if self._identity.endpoints and self._identity.endpoints.get(
-                endpoint
-            ) in (
-                False,
-                None,
-            ):
-                # Remove the endpoint from the map
-                data_map.endpoint.remove(endpoint)
+        # Filter a copy so availability checks never prune the stored finder.
+        finder = deepcopy(data_map)
+        finder.endpoint = [
+            endpoint
+            for endpoint in data_map.endpoint
+            if not self._identity.endpoints
+            or self._identity.endpoints.get(endpoint) not in (False, None)
+        ]
 
-        _LOGGER.debug("Endpoints to check: %s", data_map.endpoint)
+        _LOGGER.debug("Endpoints to check: %s", finder.endpoint)
 
-        return data_map
+        return finder
 
     def _transform_data(
         self, datatype: AsusData, data: Any, **kwargs: Any
@@ -1249,7 +1269,7 @@ class AsusRouter:
 
         _LOGGER.debug("Triggered method _async_check_state_dependency")
 
-        dependency = get_datatype(state)
+        dependency = get_datatype(state, state_map=self._state_map)
 
         if dependency == AsusData.VPNC:
             # VPNC state change requires the correct previous state
@@ -1266,7 +1286,7 @@ class AsusRouter:
 
         _LOGGER.debug("Triggered method _async_get_state_callback")
 
-        datatype = get_datatype(state)
+        datatype = get_datatype(state, state_map=self._state_map)
         # If state is one of AsusState.AURA enum
         if datatype == AsusData.AURA:
             return self.async_api_command
@@ -1286,7 +1306,7 @@ class AsusRouter:
         _LOGGER.debug(
             "Setting state for datatype `%s` using state type `%s` with %d "
             "argument(s). Expecting modify: `%s`",
-            get_datatype(state),
+            get_datatype(state, state_map=self._state_map),
             type(state).__name__,
             len(kwargs),
             expect_modify,
@@ -1301,6 +1321,7 @@ class AsusRouter:
         result = await set_state(
             callback=callback,
             state=state,
+            state_map=self._state_map,
             expect_modify=expect_modify,
             router_state=self._state,
             identity=self._identity,
@@ -1312,7 +1333,7 @@ class AsusRouter:
             result = True
 
         if result is True:
-            _datatype = get_datatype(state)
+            _datatype = get_datatype(state, state_map=self._state_map)
 
             if _datatype in (AsusData.VPNC, AsusData.AURA):
                 # The only way to make it work with VPN Fusion
@@ -1348,7 +1369,11 @@ class AsusRouter:
                     self._last_id,
                 )
                 save_state(
-                    state, self._state, self._needed_time, self._last_id
+                    state,
+                    self._state,
+                    self._needed_time,
+                    self._last_id,
+                    state_map=self._state_map,
                 )
                 # Reset the needed time and last id
                 self._needed_time = None
