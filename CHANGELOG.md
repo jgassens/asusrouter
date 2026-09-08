@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.0.0+jgassens.3
+
+- Connection: a caller's own cancellation now propagates instead of being
+  swallowed as a failed connect; the login fallback no longer cancels the
+  task it runs inside; a login on a closed session no longer awaits itself.
+- Connection: redirects are refused (`allow_redirects=False`, any 3xx is an
+  error) and response bodies are capped at 8 MiB, checked against both the
+  declared length and the decompressed stream.
+- Authorization retry is bounded to one re-login per request instead of
+  recursing; a firmware update without release-note endpoints no longer logs
+  a warning on every poll.
+- Each `AsusRouter` instance owns its data and state lookup maps. Rules
+  removed or added for one router (Merlin vs stock, DSL, VPN generation) no
+  longer leak into other routers in the same process.
+- Parental control: `async_set_state` for a rule now holds a lock and
+  refetches the table before writing; a failed refetch aborts the write.
+  Rule names are limited to 32 characters and names and schedules reject
+  delimiter and control characters. Unknown rule type codes map to
+  `PCRuleType.UNKNOWN`. Block-all is saved under `block_all`, not `state`.
+- Parsers skip malformed port-forwarding, VPN status, dual-WAN, port-status
+  and sysinfo rows instead of raising; deeply nested JSON raises
+  `AsusRouterDataError` instead of a recursion error.
+- OpenVPN client IDs are validated as integers 1 to 5 before use.
+- `async_call_service` no longer mutates the caller's arguments dict.
+- Dump tool: files are created private (0600, exclusive), the login payload
+  is not recorded, and tokens, cookies, passwords, PSKs and RADIUS keys are
+  redacted in metadata, logs and content. The CLI reads the password from a
+  prompt or `--password-stdin` and warns when it is given on the command line.
+- Removed unused code: `AsusRouterSessionError`, `CLIENT_MAP`, `ARWiFiBand`,
+  `ARWiFiFrequency`, `PORT_SUBTYPE`, the empty RGB endpoint module and
+  several no-op helpers. `handle_access_error` now takes the content and an
+  optional endpoint. `Connection.async_connect` no longer accepts `lock`.
+- Version bumped so that pip and Home Assistant reinstall the library.
+
 ## 2.0.0+jgassens.2
 
 - Parental control: forced reads now raise on fetch failure instead of

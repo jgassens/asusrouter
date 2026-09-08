@@ -5,7 +5,7 @@ used by [AsusRouter Fixed IP](https://github.com/jgassens/ha-asusrouter).
 It communicates with ASUSWRT routers through their authenticated HTTP(S) WebUI
 interface and includes guarded static-DHCP reservation support.
 
-Current maintenance release: **v2.0.0+jgassens.2**.
+Current maintenance release: **v2.0.0+jgassens.3**.
 
 ## Purpose
 
@@ -52,7 +52,7 @@ read back from the router by the Home Assistant integration.
 ## Install
 
 ```sh
-pip install "asusrouter @ git+https://github.com/jgassens/asusrouter.git@v2.0.0+jgassens.2"
+pip install "asusrouter @ git+https://github.com/jgassens/asusrouter.git@v2.0.0+jgassens.3"
 ```
 
 Applications that control real routers should pin a release tag or commit
