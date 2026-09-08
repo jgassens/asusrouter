@@ -122,11 +122,7 @@ def _get_module_name(
 ) -> str | None:
     """Get the module name."""
 
-    module_class = (
-        get_datatype(state)
-        if state_map is None
-        else get_datatype(state, state_map=state_map)
-    )
+    module_class = get_datatype(state, state_map=state_map)
     if module_class:
         return module_class.value
 

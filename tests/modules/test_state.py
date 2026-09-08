@@ -136,7 +136,7 @@ def test_get_module_name(
     """Test _get_module_name."""
 
     # Mock the get_datatype function
-    def _mock_get_datatype(s):
+    def _mock_get_datatype(s, state_map=None):
         return mock_state_map.get(s)
 
     with mock.patch(
