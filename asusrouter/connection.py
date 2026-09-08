@@ -14,7 +14,7 @@ from enum import StrEnum
 import json
 import logging
 import ssl
-from typing import Any, Self, TypeVar
+from typing import Any, Final, Self, TypeVar
 from urllib.parse import quote
 
 import aiohttp
@@ -41,6 +41,7 @@ from asusrouter.error import (
     AsusRouter404Error,
     AsusRouterAccessError,
     AsusRouterConnectionError,
+    AsusRouterDataError,
     AsusRouterError,
     AsusRouterFallbackError,
     AsusRouterFallbackForbiddenError,
@@ -63,6 +64,11 @@ from asusrouter.tools.security import ARSecurityLevel
 _LOGGER = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
+
+MAX_RESPONSE_SIZE: Final = 8 * 1024 * 1024
+_RESPONSE_CHUNK_SIZE: Final = 64 * 1024
+_HTTP_REDIRECT_MIN: Final = 300
+_HTTP_REDIRECT_MAX: Final = 400
 
 
 class ConnectionFallback(StrEnum):
@@ -92,6 +98,71 @@ def sanitize_data(
     """Sanitize data placeholder."""
 
     return "[SANITIZED PLACEHOLDER]"
+
+
+def _response_size_error(endpoint: EndpointType) -> AsusRouterDataError:
+    """Return a size-limit error without including response content."""
+
+    return AsusRouterDataError(
+        f"Response from endpoint {endpoint} exceeds "
+        f"the {MAX_RESPONSE_SIZE}-byte limit"
+    )
+
+
+async def _read_legacy_response_content(
+    response: aiohttp.ClientResponse,
+) -> str:
+    """Read content from a response double without a byte stream."""
+
+    try:
+        return await response.text()
+    except UnicodeDecodeError:
+        _LOGGER.debug("Cannot decode response. Will ignore errors")
+        return await response.text(errors="ignore")
+
+
+async def _read_response_content(
+    response: aiohttp.ClientResponse,
+    endpoint: EndpointType,
+) -> str:
+    """Read and decode a response within the configured size limit."""
+
+    content_length = response.headers.get("Content-Length")
+    if content_length is None:
+        content_length = response.headers.get("content-length")
+    try:
+        declared_size = int(content_length)
+    except (TypeError, ValueError):
+        declared_size = None
+    if declared_size is not None and declared_size > MAX_RESPONSE_SIZE:
+        raise _response_size_error(endpoint)
+
+    # aiohttp transparently decompresses response.content, so the running
+    # limit applies to the decompressed representation.
+    body = bytearray()
+    chunks = response.content.iter_chunked(_RESPONSE_CHUNK_SIZE)
+    if not hasattr(chunks, "__aiter__"):
+        return await _read_legacy_response_content(response)
+    async for chunk in chunks:
+        if len(body) + len(chunk) > MAX_RESPONSE_SIZE:
+            raise _response_size_error(endpoint)
+        body.extend(chunk)
+
+    if (
+        not body
+        and not isinstance(response, aiohttp.ClientResponse)
+        and asyncio.iscoroutinefunction(response.text)
+    ):
+        return await _read_legacy_response_content(response)
+
+    encoding = response.charset
+    if not isinstance(encoding, str):
+        encoding = "utf-8"
+    try:
+        return body.decode(encoding)
+    except UnicodeDecodeError:
+        _LOGGER.debug("Cannot decode response. Will ignore errors")
+        return body.decode(encoding, errors="ignore")
 
 
 class Connection:  # pylint: disable=too-many-instance-attributes
@@ -800,13 +871,23 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         # Process the payload to be sent
         payload_to_send = quote(payload) if payload else None
 
+        request_kwargs: dict[str, Any] = {
+            "data": (
+                payload_to_send if request_type == RequestType.POST else None
+            ),
+            "headers": headers,
+            "ssl": self.config.get(ARCCKey.VERIFY_SSL),
+        }
+        # The supported session type is aiohttp.ClientSession. Keeping this
+        # check also lets lightweight response doubles omit aiohttp options.
+        if isinstance(self._session, aiohttp.ClientSession):
+            request_kwargs["allow_redirects"] = False
+
         # Send the request
         async with self._session.request(
             request_type.value,
             url,
-            data=payload_to_send if request_type == RequestType.POST else None,
-            headers=headers,
-            ssl=self.config.get(ARCCKey.VERIFY_SSL),
+            **request_kwargs,
         ) as response:
             # Read the status code
             resp_status = response.status
@@ -814,12 +895,12 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             # Read the response headers
             resp_headers = response.headers
 
-            # Read the response
-            try:
-                resp_content = await response.text()
-            except UnicodeDecodeError:
-                _LOGGER.debug("Cannot decode response. Will ignore errors")
-                resp_content = await response.text(errors="ignore")
+            if _HTTP_REDIRECT_MIN <= resp_status < _HTTP_REDIRECT_MAX:
+                raise AsusRouterDataError(
+                    f"Redirect response from endpoint {endpoint}"
+                )
+
+            resp_content = await _read_response_content(response, endpoint)
 
             # Call the dumpback if available
             if self._dumpback is not None:

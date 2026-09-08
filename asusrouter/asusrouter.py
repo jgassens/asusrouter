@@ -467,53 +467,57 @@ class AsusRouter:
 
         _LOGGER.debug("Triggered method async_api_load: %s", endpoint)
 
-        # Load the endpoint
-        try:
-            status, _, content = await self.async_api_query(endpoint, request)
-        except AsusRouter404Error:
-            _LOGGER.debug("Endpoint %s not found", endpoint)
-            return {}
-        except AsusRouterAccessError as ex:
-            # Check whether we are not connected
-            args = ex.args
-            if args[1] == AccessError.AUTHORIZATION:
-                # Mark the connection as dropped
+        attempt = retry
+        while True:
+            # Load the endpoint
+            try:
+                status, _, content = await self.async_api_query(
+                    endpoint, request
+                )
+            except AsusRouter404Error:
+                _LOGGER.debug("Endpoint %s not found", endpoint)
+                return {}
+            except AsusRouterAccessError as ex:
+                is_authorization_error = (
+                    len(ex.args) > 1
+                    and ex.args[1] == AccessError.AUTHORIZATION
+                )
+                if not is_authorization_error or attempt >= 1:
+                    raise
+
+                # Mark the connection as dropped so the next query logs in.
                 await self._async_drop_connection()
-                # Wait before repeating the request
-                await asyncio.sleep(1 + retry * 3)
-                # Repeat request once more and see what happens
-                return await self.async_api_load(endpoint, request, True)
-            # Otherwise just raise the exception
-            raise ex
+                await asyncio.sleep(1 + attempt * 3)
+                attempt += 1
+                continue
 
-        # Log status
-        _LOGGER.debug("Response %s received from %s", status, endpoint)
+            # Log status
+            _LOGGER.debug("Response %s received from %s", status, endpoint)
 
-        # Try to read the content
-        try:
-            result = read(endpoint, content, config=self.config)
-        except json.JSONDecodeError as ex:
-            # Not like this is supposed to happen, but just in case
-            _LOGGER.debug(
-                "Failed to decode response from endpoint `%s` with "
-                "JSONDecodeError; body length: %d",
-                endpoint,
-                len(content),
-            )
-            # Just repeat request once more and see what happens
-            # Only if we haven't tried already
-            if not retry:
-                return await self.async_api_load(endpoint, request, True)
-            raise AsusRouterDataError(
-                "Something went wrong while reading the content"
-            ) from ex
+            # Try to read the content
+            try:
+                result = read(endpoint, content, config=self.config)
+            except json.JSONDecodeError as ex:
+                # Not like this is supposed to happen, but just in case
+                _LOGGER.debug(
+                    "Failed to decode response from endpoint `%s` with "
+                    "JSONDecodeError; body length: %d",
+                    endpoint,
+                    len(content),
+                )
+                if attempt < 1:
+                    attempt += 1
+                    continue
+                raise AsusRouterDataError(
+                    "Something went wrong while reading the content"
+                ) from ex
 
-        # Check if we need to drop the connection
-        run_service = result.get("run_service", None)
-        if run_service in ("restart_httpd", "reboot"):
-            await self._async_drop_connection()
+            # Check if we need to drop the connection
+            run_service = result.get("run_service", None)
+            if run_service in ("restart_httpd", "reboot"):
+                await self._async_drop_connection()
 
-        return result
+            return result
 
     async def async_api_hook(self, request: str) -> dict[str, Any]:
         """Perform a hook to the device API.
@@ -576,7 +580,7 @@ class AsusRouter:
             return None
 
         # Check if endpoints are available
-        for endpoint in data_map.endpoint:
+        for endpoint in data_map.endpoint.copy():
             # Check endpoint availability in identity
             if self._identity.endpoints and self._identity.endpoints.get(
                 endpoint
@@ -677,6 +681,12 @@ class AsusRouter:
             # Check if update is available
             firmware = self._state[AsusData.FIRMWARE].data
             if firmware and firmware["state"] is True:
+                note_finder = self._where_to_get_data(AsusData.FIRMWARE_NOTE)
+                if note_finder is not None and not note_finder.endpoint:
+                    _LOGGER.debug(
+                        "No firmware release note endpoints available"
+                    )
+                    return
                 # Get release notes
                 try:
                     release_note = await self.async_get_data(
