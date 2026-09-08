@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from getpass import getpass
 import logging
+import sys
 
 import aiohttp
 
@@ -87,12 +89,18 @@ def main() -> None:
         default="admin",
         help="The username for the router. Default: `admin`.",
     )
-    parser.add_argument(
+    password_group = parser.add_mutually_exclusive_group()
+    password_group.add_argument(
         "-p",
         "--password",
         type=str,
-        default="admin",
-        help="The password for the router. Default: `admin`.",
+        default=None,
+        help="The router password (unsafe: visible in the process list).",
+    )
+    password_group.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="Read the router password from standard input.",
     )
     parser.add_argument(
         "-s",
@@ -123,6 +131,16 @@ def main() -> None:
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(module)s: %(message)s",
     )
+
+    if args.password is not None:
+        _LOGGER.warning(
+            "Using --password exposes the password in the process list; "
+            "prefer --password-stdin or the interactive prompt"
+        )
+    elif args.password_stdin:
+        args.password = sys.stdin.readline().rstrip("\r\n")
+    else:
+        args.password = getpass("Router password: ")
 
     # Connect to the router and dump the data
     try:
