@@ -104,8 +104,17 @@ async def test_async_call_service_failing_callback(
     async def failing_callback(_):
         raise exception("Test exception")
 
-    with pytest.raises(exception):
+    with pytest.raises(exception) as exc_info:
         await async_call_service(failing_callback, "restart_httpd")
+
+    traceback = exc_info.value.__traceback__
+    service_frames = 0
+    while traceback is not None:
+        service_frames += (
+            traceback.tb_frame.f_code.co_name == "async_call_service"
+        )
+        traceback = traceback.tb_next
+    assert service_frames == 1
 
 
 @pytest.mark.asyncio

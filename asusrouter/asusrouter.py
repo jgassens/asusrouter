@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 
@@ -27,7 +27,6 @@ from asusrouter.const import (
     DEFAULT_PORT_HTTPS,
     DEFAULT_RESULT_SUCCESS,
     DEFAULT_TIMEOUT,
-    RequestType,
 )
 from asusrouter.error import (
     AsusRouter404Error,
@@ -56,10 +55,10 @@ from asusrouter.modules.data_transform import (
     transform_wan,
 )
 from asusrouter.modules.endpoint import (
-    ENDPOINT_FORCE_REQUEST,
     Endpoint,
     EndpointControl,
     EndpointType,
+    get_request_type,
     process,
     read,
 )
@@ -215,21 +214,18 @@ class AsusRouter:
         _LOGGER.debug("Triggered method async_connect")
 
         # Connect to the device
-        try:
-            # Make sure the connection is initialized
-            if self._connection is None:
-                await self.async_init_connection()
+        # Make sure the connection is initialized
+        if self._connection is None:
+            await self.async_init_connection()
 
-            # Connect to the device
-            result = (
-                await self._connection.async_connect()
-                if self._connection
-                else False
-            )
-            if result is False:
-                return False
-        except Exception as ex:  # pylint: disable=broad-except
-            raise ex
+        # Connect to the device
+        result = (
+            await self._connection.async_connect()
+            if self._connection
+            else False
+        )
+        if result is False:
+            return False
 
         # Get the device identity
         return await self.async_get_identity() is not None
@@ -240,11 +236,8 @@ class AsusRouter:
         _LOGGER.debug("Triggered method async_disconnect")
 
         # Disconnect from the device
-        try:
-            if self._connection:
-                await self._connection.async_disconnect()
-        except Exception as ex:  # noqa: BLE001
-            await self._async_handle_exception(ex)
+        if self._connection:
+            await self._connection.async_disconnect()
 
         return True
 
@@ -258,13 +251,6 @@ class AsusRouter:
 
         if self._connection:
             self._connection.reset_connection()
-
-    async def _async_handle_exception(self, ex: Exception) -> None:
-        """Handle exceptions."""
-
-        _LOGGER.debug("Triggered method _async_handle_exception")
-
-        raise ex
 
     async def _async_handle_reboot(self) -> None:
         """Handle reboot."""
@@ -454,7 +440,7 @@ class AsusRouter:
 
     async def async_api_query(
         self, endpoint: EndpointType, payload: str | None = None
-    ) -> tuple[int, dict[str, str], str]:
+    ) -> tuple[int, Mapping[str, str], str]:
         """Query the API endpoint."""
 
         if endpoint in ASUSDATA_ENDPOINT_APPEND:
@@ -475,10 +461,8 @@ class AsusRouter:
             len(payload) if payload else 0,
         )
 
-        request_type = ENDPOINT_FORCE_REQUEST.get(endpoint, RequestType.POST)
-
         return await self._connection.async_query(
-            endpoint, payload, request_type=request_type
+            endpoint, payload, request_type=get_request_type(endpoint)
         )
 
     async def async_api_load(
@@ -676,15 +660,6 @@ class AsusRouter:
             return endpoint == Endpoint.HOOK
 
         return False
-
-    async def _check_prerequisites(self, datatype: AsusData) -> None:
-        """Check prerequisites before fetching data."""
-
-        _LOGGER.debug(
-            "Triggered method _check_prerequisites for datatype `%s`", datatype
-        )
-
-        # A placeholder for future checks
 
     async def _check_postrequisites(self, datatype: AsusData) -> None:
         """Check postrequisites after fetching data.
@@ -1083,9 +1058,6 @@ class AsusRouter:
         self._state[datatype].start()
 
         try:
-            # Check prerequisites
-            await self._check_prerequisites(datatype)
-
             # Get the data finder
             data_finder = self._where_to_get_data(datatype)
 
@@ -1112,11 +1084,12 @@ class AsusRouter:
                     request += f"{key}({value});"
                 if data_finder.method:
                     argument = self._get_attribute(data_finder.arguments)
-                    request += (
+                    generated_request = (
                         data_finder.method(argument)
                         if argument
                         else data_finder.method()
                     )
+                    request += cast(str, generated_request)
                 # Check that we are not fetching this data already
 
                 # Add the request from kwargs
@@ -1282,7 +1255,7 @@ class AsusRouter:
 
     async def _async_get_state_callback(
         self, state: AsusState
-    ) -> Callable[..., Awaitable]:
+    ) -> ARCallbackType:
         """Get the state callback."""
 
         _LOGGER.debug("Triggered method _async_get_state_callback")

@@ -70,10 +70,6 @@ class ARSupportSource(ARDataSource):
         super().__init__()
 
 
-# Universal instance - preferred
-ARSupportSourceUniversal: ARSupportSource = ARSupportSource()
-
-
 TRANSLATION_TABLE: dict[ARSupportType, ARCallableType] = {
     ARSupportType.AI: translate_ai,
     ARSupportType.AI_CAPABILITIES: translate_ai_capabilities,

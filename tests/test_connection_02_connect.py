@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -116,14 +117,14 @@ class TestConnectionConnect:
         # Case 1: Connection succeeds
         mock_async_connect_with_lock.return_value = True
         result = await connection.async_connect()
-        mock_async_connect_with_lock.assert_awaited_once_with(None)
+        mock_async_connect_with_lock.assert_awaited_once_with()
         assert result is True
 
         # Case 2: Connection times out
         mock_async_connect_with_lock.reset_mock()
         mock_async_connect_with_lock.side_effect = asyncio.TimeoutError
         result = await connection.async_connect()
-        mock_async_connect_with_lock.assert_awaited_once_with(None)
+        mock_async_connect_with_lock.assert_awaited_once_with()
         assert result is False
 
     @pytest.mark.asyncio
@@ -297,6 +298,39 @@ class TestConnectionConnect:
                 }
             else:
                 assert connection._connected is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "removed_message"),
+        [
+            (
+                AsusRouterError("Generic AsusRouter error"),
+                "Connection failed with error",
+            ),
+            (
+                RuntimeError("Unexpected error"),
+                "Unexpected error while connecting",
+            ),
+        ],
+    )
+    async def test_connect_does_not_log_propagated_errors(
+        self,
+        error: Exception,
+        removed_message: str,
+        connection_factory: ConnectionFactory,
+        send_request: AsyncPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Do not catch errors solely to log and re-raise them."""
+
+        connection = connection_factory()
+        send_request(connection, side_effect=error)
+        caplog.set_level(logging.DEBUG)
+
+        with pytest.raises(type(error), match=str(error)):
+            await connection._async_connect_with_lock()
+
+        assert removed_message not in caplog.text
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

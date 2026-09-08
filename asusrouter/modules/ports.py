@@ -44,16 +44,6 @@ PORT_SPEED = {
     "T": PortSpeed.LINK_10000,
 }
 
-PORT_SUBTYPE = {
-    1: PORT_SPEED["M"],
-    2: PORT_SPEED["M"],
-    3: PORT_SPEED["G"],
-    4: PORT_SPEED["F"],
-    5: PORT_SPEED["Q"],
-    6: PORT_SPEED["T"],
-    7: PORT_SPEED["T"],
-}
-
 
 class PortType(StrEnum):
     """Port type class."""

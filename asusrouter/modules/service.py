@@ -69,10 +69,7 @@ async def async_call_service(
     commands.update(arguments)
 
     # Send the commands
-    try:
-        result = await callback(commands)
-    except Exception as ex:  # pylint: disable=broad-except
-        raise ex
+    result = await callback(commands)
 
     if service is not None:
         # Check if the service is run

@@ -93,17 +93,21 @@ def test_is_sensitive_endpoint(
 def test_get_module() -> None:
     """Test _get_module method."""
 
+    _get_module.cache_clear()
+
     # Test valid endpoint
     with patch(
         "importlib.import_module", return_value="mocked_module"
     ) as mock_import:
         result = _get_module(Endpoint.PORT_STATUS)
+        assert _get_module(Endpoint.PORT_STATUS) == "mocked_module"
         assert result == "mocked_module"  # type: ignore[comparison-overlap]
         mock_import.assert_called_once_with(
             "asusrouter.modules.endpoint.port_status"
         )
 
     # Test invalid endpoint
+    _get_module.cache_clear()
     with patch("importlib.import_module") as mock_import:
         mock_import.side_effect = ModuleNotFoundError
         result = _get_module(Endpoint.FIRMWARE)
@@ -111,6 +115,8 @@ def test_get_module() -> None:
         mock_import.assert_called_once_with(
             "asusrouter.modules.endpoint.firmware"
         )
+
+    _get_module.cache_clear()
 
 
 def test_read() -> None:

@@ -151,13 +151,3 @@ DEVICEMAP_CLEAR = {
         "data_rate_info_5g_2": '"',
     }
 }
-
-# This data is stored in a special way
-# psta:wlc_state=0;wlc_state_auth=0;
-# as a single value
-# We need to split it into multiple values and store them in the corresponding
-# group. Format: (output_group, input_group, input_subgroup, [input_values])
-# This part is not used in the current version of the library
-DEVICEMAP_SPECIAL = [
-    ("wan", "wan", "psta", ["wlc_state", "wlc_state_auth"]),
-]

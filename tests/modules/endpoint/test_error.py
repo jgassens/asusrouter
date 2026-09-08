@@ -26,12 +26,7 @@ def test_handle_access_error_success(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     # Should not raise
-    handle_access_error(
-        endpoint=None,  # type: ignore[arg-type]
-        status=None,
-        headers=None,
-        content=None,
-    )
+    handle_access_error(None)
 
 
 @pytest.mark.parametrize(
@@ -50,12 +45,7 @@ def test_handle_access_error_json_format_raises(
     )
 
     with pytest.raises(AsusRouterRequestFormatError):
-        handle_access_error(
-            endpoint=None,  # type: ignore[arg-type]
-            status=None,
-            headers=None,
-            content=None,
-        )
+        handle_access_error(None)
 
 
 def test_handle_access_error_logout_raises(
@@ -70,12 +60,7 @@ def test_handle_access_error_logout_raises(
     )
 
     with pytest.raises(AsusRouterLogoutError):
-        handle_access_error(
-            endpoint=None,  # type: ignore[arg-type]
-            status=None,
-            headers=None,
-            content=None,
-        )
+        handle_access_error(None)
 
 
 def test_handle_access_error_try_again_includes_timeout(
@@ -97,12 +82,7 @@ def test_handle_access_error_try_again_includes_timeout(
     )
 
     with pytest.raises(AsusRouterAccessError) as exinfo:
-        handle_access_error(
-            endpoint=None,  # type: ignore[arg-type]
-            status=None,
-            headers=None,
-            content=None,
-        )
+        handle_access_error(None)
 
     ex = exinfo.value
     # raised with args: ("Access error", error_enum, attributes)
@@ -123,12 +103,7 @@ def test_handle_access_error_unknown_raises_access_error(
     )
 
     with pytest.raises(AsusRouterAccessError) as exinfo:
-        handle_access_error(
-            endpoint=None,  # type: ignore[arg-type]
-            status=None,
-            headers=None,
-            content=None,
-        )
+        handle_access_error(None)
 
     ex = exinfo.value
     assert ex.args[1] == AccessError.UNKNOWN

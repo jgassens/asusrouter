@@ -16,7 +16,6 @@ from asusrouter.error import (
     AsusRouterLogoutError,
     AsusRouterRequestFormatError,
 )
-from asusrouter.modules.endpoint import EndpointType
 from asusrouter.tools.enum import FromIntMixin
 from asusrouter.tools.readers import read_json_content
 
@@ -44,9 +43,7 @@ class AccessError(FromIntMixin, IntEnum):
     RESET_REQUIRED = 11
 
 
-def handle_access_error(
-    endpoint: EndpointType, status: Any, headers: Any, content: Any
-) -> None:
+def handle_access_error(content: Any) -> None:
     """Handle access errors."""
 
     # Read the page as json

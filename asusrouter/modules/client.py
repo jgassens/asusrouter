@@ -76,56 +76,6 @@ class AsusClientDescription:
     vendor: str | None = None
 
 
-CLIENT_MAP: dict[str, list[MapValueType]] = {
-    "connected_since": [
-        ("wlConnectTime", safe_time_from_delta),
-    ],
-    "connection_type": [
-        ("connection_type"),
-        ("isWL", safe_int),
-    ],
-    "guest": [
-        ("guest"),
-        ("isGN", safe_int),
-    ],
-    "internet_mode": [
-        ("internetMode", get_internet_mode),
-    ],
-    "internet_state": [
-        ("internetState", safe_bool),
-    ],
-    "ip": [
-        ("ip"),
-    ],
-    "ip_method": [
-        ("ipMethod"),
-    ],
-    "mac": [
-        ("mac"),
-    ],
-    "name": [
-        ("nickName"),
-        ("name"),
-        ("mac"),
-    ],
-    "node": [
-        ("node"),
-    ],
-    "online": [
-        ("online"),
-        ("isOnline", safe_bool),
-    ],
-    "rssi": [
-        ("rssi", safe_int),
-    ],
-    "rx_speed": [
-        ("curRx", safe_float),
-    ],
-    "tx_speed": [
-        ("curTx", safe_float),
-    ],
-}
-
 CLIENT_MAP_DESCRIPTION: dict[str, list[MapValueType]] = {
     "name": [
         ("nickName"),

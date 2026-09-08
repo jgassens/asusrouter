@@ -36,10 +36,6 @@ class AsusRouterTimeoutError(AsusRouterError):
     """Timeout error."""
 
 
-class AsusRouterSessionError(AsusRouterError):
-    """Session error."""
-
-
 class AsusRouterSSLCertificateError(AsusRouterError):
     """SSL certificate error."""
 

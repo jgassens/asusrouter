@@ -2,33 +2,10 @@
 
 from __future__ import annotations
 
-from enum import IntEnum, StrEnum
+from enum import IntEnum
 
-from asusrouter.const import UNKNOWN_MEMBER, UNKNOWN_MEMBER_STR
-from asusrouter.tools.enum import FromIntMixin, FromStrMixin
-
-
-class ARWiFiBand(FromStrMixin, StrEnum):
-    """WiFi band types."""
-
-    UNKNOWN = UNKNOWN_MEMBER_STR
-
-    BAND_2G1 = "2g1"
-    BAND_2G2 = "2g2"
-    BAND_5G1 = "5g1"
-    BAND_5G2 = "5g2"
-    BAND_6G1 = "6g1"
-    BAND_6G2 = "6g2"
-
-
-class ARWiFiFrequency(FromStrMixin, StrEnum):
-    """WiFi frequency types."""
-
-    UNKNOWN = UNKNOWN_MEMBER_STR
-
-    FREQ_2G = "2g"
-    FREQ_5G = "5g"
-    FREQ_6G = "6g"
+from asusrouter.const import UNKNOWN_MEMBER
+from asusrouter.tools.enum import FromIntMixin
 
 
 class ARWiFiGeneration(FromIntMixin, IntEnum):

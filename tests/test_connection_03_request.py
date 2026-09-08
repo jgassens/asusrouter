@@ -204,12 +204,7 @@ class TestConnectionRequests:
             # Verify handle_access_error was called if error_status
             # in content, else not
             if resp_content and "error_status" in resp_content:
-                mock_handle_access_error.assert_called_once_with(
-                    EndpointService.LOGIN,
-                    resp_status,
-                    resp_headers,
-                    resp_content,
-                )
+                mock_handle_access_error.assert_called_once_with(resp_content)
             else:
                 mock_handle_access_error.assert_not_called()
 

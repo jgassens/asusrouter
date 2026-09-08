@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from concurrent.futures import ThreadPoolExecutor
 from enum import StrEnum
+from functools import lru_cache
 import importlib
 import logging
 from types import ModuleType
@@ -106,7 +106,7 @@ SENSITIVE_ENDPOINTS: Final[frozenset[EndpointType]] = frozenset(
 )
 
 
-def get_request_type(endpoint: EndpointType) -> RequestType | None:
+def get_request_type(endpoint: EndpointType) -> RequestType:
     """Get the request type for the endpoint."""
 
     return ENDPOINT_FORCE_REQUEST.get(endpoint, RequestType.POST)
@@ -118,6 +118,7 @@ def is_sensitive_endpoint(endpoint: EndpointType) -> bool:
     return endpoint in SENSITIVE_ENDPOINTS
 
 
+@lru_cache
 def _get_module(
     endpoint: EndpointType,
 ) -> ModuleType | None:
@@ -127,12 +128,7 @@ def _get_module(
         # Get the module name from the endpoint
         module_name = f"asusrouter.modules.endpoint.{endpoint.name.lower()}"
 
-        # Import the module in a separate thread
-        # to avoid blocking the main thread
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(importlib.import_module, module_name)
-            # Return the module
-            return future.result()
+        return importlib.import_module(module_name)
 
     except ModuleNotFoundError:
         _LOGGER.debug("No module found for endpoint %s", endpoint)

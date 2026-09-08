@@ -41,7 +41,7 @@ class AsusDataFinder:
         merge: AsusDataMerge = AsusDataMerge.ANY,
         request: list[tuple[str, ...]] | None = None,
         nvram: list[str] | str | None = None,
-        method: Callable | None = None,
+        method: Callable[..., str | None] | None = None,
         arguments: AsusRouterAttribute | None = None,
     ) -> None:
         """Initialize the data finder."""

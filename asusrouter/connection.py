@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 import contextlib
 from enum import StrEnum
 import json
@@ -311,7 +311,6 @@ class Connection:  # pylint: disable=too-many-instance-attributes
 
     async def async_connect(
         self,
-        lock: asyncio.Lock | None = None,
         t_overwrite: float | None = None,
         block_error: bool = False,
     ) -> bool:
@@ -329,7 +328,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             if self._connect_task is None or self._connect_task.done():
                 # start the connect attempt as a background task
                 self._connect_task = asyncio.create_task(
-                    self._async_connect_with_lock(lock)
+                    self._async_connect_with_lock()
                 )
             task = self._connect_task
 
@@ -358,20 +357,15 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             if self._connect_task is task and task.done():
                 self._connect_task = None
 
-    async def _async_connect_with_lock(
-        self,
-        lock: asyncio.Lock | None = None,
-    ) -> bool:
+    async def _async_connect_with_lock(self) -> bool:
         """Connect to the device and get a new auth token.
 
         Acquire the lock only for state checks/updates. Perform the actual
         network login outside the lock to avoid deadlocks when fallback
         triggers a nested connect attempt.
         """
-        _lock = lock or self._connection_lock
-
         # Quick check / early exit while holding the lock
-        async with _lock:
+        async with self._connection_lock:
             if self._connected:
                 _LOGGER.debug("Already connected to %s", self._hostname)
                 return True
@@ -397,16 +391,6 @@ class Connection:  # pylint: disable=too-many-instance-attributes
                 f"Cannot access {EndpointService.LOGIN}. "
                 "Failed in `async_connect`"
             ) from ex
-        except AsusRouterError as ex:
-            _LOGGER.debug("Connection failed with error: %s", ex)
-            raise
-        except Exception as ex:  # pylint: disable=broad-except
-            _LOGGER.debug(
-                "Unexpected error while connecting to %s: %s",
-                self._hostname,
-                ex,
-            )
-            raise
 
         # Process response and update state while holding the lock
         content = json.loads(resp_content)
@@ -415,7 +399,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             _LOGGER.error("No token received")
             return False
 
-        async with _lock:
+        async with self._connection_lock:
             # Another task may have connected while we performed
             # the network IO. If so, avoid overwriting state and return early.
             if self._connected:
@@ -536,7 +520,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         payload: str | None = None,
         headers: dict[str, str] | None = None,
         request_type: RequestType = RequestType.POST,
-    ) -> tuple[int, dict[str, str], str]:
+    ) -> tuple[int, Mapping[str, str], str]:
         """Send a request to the device."""
 
         # Send request
@@ -564,9 +548,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
 
             # Check for access errors
             if "error_status" in resp_content:
-                handle_access_error(
-                    endpoint, resp_status, resp_headers, resp_content
-                )
+                handle_access_error(resp_content)
 
             # Reset fallback tracker if multiple fallbacks are allowed
             if self.config.get(ARCCKey.ALLOW_MULTIPLE_FALLBACKS):
@@ -810,7 +792,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         payload: str | None = None,
         headers: dict[str, str] | None = None,
         request_type: RequestType = RequestType.POST,
-    ) -> tuple[int, dict[str, str], str]:
+    ) -> tuple[int, Mapping[str, str], str]:
         """Send a request to the device."""
 
         # If not connected, try to connect
@@ -838,7 +820,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         payload: str | None = None,
         headers: dict[str, str] | None = None,
         request_type: RequestType = RequestType.POST,
-    ) -> Any:
+    ) -> tuple[int, Mapping[str, str], str]:
         """Make a post request to the device."""
 
         # Check if a session is available

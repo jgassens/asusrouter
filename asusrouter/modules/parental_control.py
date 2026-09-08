@@ -88,14 +88,13 @@ class ParentalControlRule:
 def _read_positive_int(value: Any) -> int | None:
     """Return a positive integer from a supported router value."""
 
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not (
+        isinstance(value, int) or isinstance(value, str) and value.isdecimal()
+    ):
         return None
-    if isinstance(value, int):
-        return value if value > 0 else None
-    if isinstance(value, str) and value.isdecimal():
-        parsed = int(value)
-        return parsed if parsed > 0 else None
-    return None
+
+    parsed = safe_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def read_pc_capabilities(data: dict[str, Any]) -> ParentalControlCapabilities:

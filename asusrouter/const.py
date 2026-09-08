@@ -66,12 +66,10 @@ DEFAULT_PORT_HTTPS = 8443
 
 # AsusRouter definitions
 AR_CALL_GET_STATE = "get_state"
-AR_CALL_SET_STATE = "set_state"
 AR_CALL_TRANSLATE_STATE = "translate_state"
 
 # Library defaults
 DEFAULT_CACHE_TIME = 5.0
-DEFAULT_SLEEP_TIME = 0.1
 DEFAULT_TIMEOUT = 15
 DEFAULT_TIMEOUT_FALLBACK = 5
 
