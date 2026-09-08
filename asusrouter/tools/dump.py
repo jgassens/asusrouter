@@ -37,7 +37,12 @@ _SENSITIVE_KEYS = frozenset(
         "wpa_psk",
     }
 )
-_WORD_PATTERN = re.compile(r"[a-zA-Z0-9_-]+")
+# `key: value` or `key=value` in loosely structured router text.
+# Only the value after a sensitive key is replaced.
+_TEXT_ASSIGNMENT = re.compile(
+    r"""(?P<key>["']?[A-Za-z0-9_-]+["']?)\s*(?P<sep>[:=])\s*"""
+    r"""(?P<value>"[^"]*"|'[^']*'|[^,;&\s}\]]*)"""
+)
 
 
 def _is_sensitive_key(key: object) -> bool:
@@ -50,12 +55,16 @@ def _is_sensitive_key(key: object) -> bool:
     )
 
 
-def _contains_sensitive_key(value: str) -> bool:
-    """Return whether unstructured text names a sensitive field."""
+def _redact_text(text: str) -> str:
+    """Replace only the values that follow sensitive keys in loose text."""
 
-    return any(
-        _is_sensitive_key(word) for word in _WORD_PATTERN.findall(value)
-    )
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group("key")
+        if not _is_sensitive_key(key.strip("\"'")):
+            return match.group(0)
+        return f'{key}{match.group("sep")}"{_REDACTED}"'
+
+    return _TEXT_ASSIGNMENT.sub(_replace, text)
 
 
 def _redact(value: Any) -> Any:
@@ -68,8 +77,8 @@ def _redact(value: Any) -> Any:
         }
     if isinstance(value, (list, tuple, set, frozenset)):
         return [_redact(item) for item in value]
-    if isinstance(value, str) and _contains_sensitive_key(value):
-        return _REDACTED
+    if isinstance(value, str):
+        return _redact_text(value)
     return value
 
 

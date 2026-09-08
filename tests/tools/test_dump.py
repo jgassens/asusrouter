@@ -10,7 +10,7 @@ import zipfile
 import pytest
 
 from asusrouter.modules.endpoint import Endpoint, EndpointService
-from asusrouter.tools.dump import AsusRouterDump
+from asusrouter.tools.dump import AsusRouterDump, _redact_content
 
 
 def _only_dump_directory(output: Path) -> Path:
@@ -186,3 +186,20 @@ async def test_dump_archive_is_private_and_redacted(tmp_path: Path) -> None:
         )
     assert token.encode() not in dumped
     assert b'"safe": "kept"' in dumped
+
+
+def test_loose_text_redacts_only_sensitive_values() -> None:
+    """Router text that is not JSON keeps its shape; only secrets go."""
+
+    body = (
+        "wl0_ssid=Home-safe;wl0_wpa_psk=SENTINEL-PSK;"
+        "http_passwd=SENTINEL-HTTP;"
+        "{'asus_token': 'SENTINEL-TOKEN', 'model': 'RT-AX88U'}"
+        " the keyboard token_bucket note stays"
+    )
+    redacted = _redact_content(body)
+
+    assert "SENTINEL" not in redacted
+    assert "wl0_ssid=Home-safe" in redacted
+    assert "'model': 'RT-AX88U'" in redacted
+    assert "keyboard token_bucket note stays" in redacted

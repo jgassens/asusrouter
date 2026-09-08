@@ -526,7 +526,7 @@ class Connection:  # pylint: disable=too-many-instance-attributes
 
             # Check for access errors
             if "error_status" in resp_content:
-                handle_access_error(resp_content)
+                handle_access_error(resp_content, endpoint)
 
             # Reset fallback tracker if multiple fallbacks are allowed
             if self.config.get(ARCCKey.ALLOW_MULTIPLE_FALLBACKS):
