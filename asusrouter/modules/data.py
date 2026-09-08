@@ -95,6 +95,13 @@ class AsusDataState:
     def update_state(self, state: Any, last_id: int | None = None) -> None:
         """Update a state variable in the data dict."""
 
+        # Import locally to keep the foundational data module acyclic.
+        from asusrouter.modules.parental_control import (  # noqa: PLC0415
+            AsusBlockAll,
+        )
+
+        state_key = "block_all" if isinstance(state, AsusBlockAll) else "state"
+
         # Convert the state if needed
         state = convert_state(state)
 
@@ -105,10 +112,10 @@ class AsusDataState:
             return
 
         if isinstance(self.data, dict):
-            self.data["state"] = state
+            self.data[state_key] = state
             return
 
-        self.data = {"state": state}
+        self.data = {state_key: state}
 
     def offset_time(self, offset: int | None) -> None:
         """Offset the timestamp unless the whole datatype needs a refresh."""

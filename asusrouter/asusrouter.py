@@ -155,6 +155,7 @@ class AsusRouter:
         self._state_map = deepcopy(AsusStateMap)
         self._state: dict[AsusData, AsusDataState] = {}
         self._data_states: dict[ARDataSource | ARDataType, ARDataState] = {}
+        self._parental_control_lock = asyncio.Lock()
         self._static_dhcp_lock = asyncio.Lock()
 
         # Set the flags
@@ -1312,21 +1313,43 @@ class AsusRouter:
             expect_modify,
         )
 
-        # Check dependencies
-        await self._async_check_state_dependency(state)
+        state_type = get_enum_key_by_value(
+            AsusState, type(state), default=AsusState.NONE
+        )
 
         # Get the state callback
         callback = await self._async_get_state_callback(state)
 
-        result = await set_state(
-            callback=callback,
-            state=state,
-            state_map=self._state_map,
-            expect_modify=expect_modify,
-            router_state=self._state,
-            identity=self._identity,
-            **kwargs,
-        )
+        if state_type == AsusState.PC_RULE:
+            # Rule changes replace the whole router table. Serialize the
+            # authoritative refresh and the write so concurrent callers
+            # cannot build replacements from the same stale snapshot.
+            async with self._parental_control_lock:
+                await self.async_get_data(
+                    AsusData.PARENTAL_CONTROL, force=True
+                )
+                result = await set_state(
+                    callback=callback,
+                    state=state,
+                    state_map=self._state_map,
+                    expect_modify=expect_modify,
+                    router_state=self._state,
+                    identity=self._identity,
+                    **kwargs,
+                )
+        else:
+            # Check dependencies
+            await self._async_check_state_dependency(state)
+
+            result = await set_state(
+                callback=callback,
+                state=state,
+                state_map=self._state_map,
+                expect_modify=expect_modify,
+                router_state=self._state,
+                identity=self._identity,
+                **kwargs,
+            )
 
         # Rewrite the result if it is the default one
         if result == DEFAULT_RESULT_SUCCESS:
@@ -1350,12 +1373,7 @@ class AsusRouter:
                         _datatype,
                         ex,
                     )
-            elif (
-                get_enum_key_by_value(
-                    AsusState, type(state), default=AsusState.NONE
-                )
-                == AsusState.PC_RULE
-            ):
+            elif state_type == AsusState.PC_RULE:
                 # We should not save this state, since it is saved differently
                 pass
             else:

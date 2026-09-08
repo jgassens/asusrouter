@@ -64,7 +64,10 @@ REQUIRE_WLAN = True
 _LOGGER = logging.getLogger(__name__)
 
 _SPEEDTEST_MIN_STEPS = 2
+_DUAL_WAN_PRIORITY_FIELDS = 2
+_PORT_FORWARDING_MIN_FIELDS = 6
 _VPNC_PART_MIN_FIELDS = 7
+_VPNC_STATUS_MIN_FIELDS = 3
 
 
 def process(data: dict[str, Any]) -> dict[AsusData, Any]:  # noqa: C901, PLR0912
@@ -390,6 +393,12 @@ def process_port_forwarding(data: dict[str, Any]) -> dict[str, Any]:
             if rule == "":
                 continue
             part = rule.split("&#62")
+            if len(part) < _PORT_FORWARDING_MIN_FIELDS:
+                _LOGGER.warning(
+                    "Skipping malformed port-forwarding row with %d fields",
+                    len(part),
+                )
+                continue
             rules.append(
                 PortForwardingRule(
                     name=safe_return(part[0]),
@@ -493,7 +502,7 @@ def process_speedtest_last_step(
     return last_step
 
 
-def process_vpnc(  # noqa: C901
+def process_vpnc(  # noqa: C901, PLR0912
     data: dict[str, Any],
 ) -> tuple[dict[AsusVPNType, dict[int, Any]], str]:
     """Process VPNC data."""
@@ -541,10 +550,22 @@ def process_vpnc(  # noqa: C901
             if client == "":
                 continue
             part = client.split(">")
+            if len(part) < _VPNC_STATUS_MIN_FIELDS:
+                _LOGGER.warning(
+                    "Skipping malformed VPN client status row with %d fields",
+                    len(part),
+                )
+                continue
             vpnc_id = safe_int(part[2])
             state_code = safe_int(part[0])
             error_code = safe_int(part[1])
-            vpnc[vpnc_id].update(
+            vpnc_client = vpnc.get(vpnc_id)
+            if vpnc_client is None:
+                _LOGGER.warning(
+                    "Skipping VPN client status for unknown id %r", vpnc_id
+                )
+                continue
+            vpnc_client.update(
                 {
                     "state": (
                         AsusVPNC(state_code)
@@ -676,16 +697,24 @@ def process_wan(data: dict[str, Any]) -> dict[Any, dict[str, Any]]:  # noqa: C90
             "priority": dualwan_priority,
         }
         # Check whether it is actually active
-        if wan["dualwan"]["priority"][1] == "none":
+        if len(wan["dualwan"]["priority"]) < _DUAL_WAN_PRIORITY_FIELDS:
+            _LOGGER.warning("Ignoring malformed dual-WAN priority")
+            wan.pop("dualwan", None)
+        elif wan["dualwan"]["priority"][1] == "none":
             wan["dualwan"]["priority"][1] = None
             wan["dualwan"]["state"] = False
         else:
             wan["dualwan"]["state"] = True
 
     # Assign main IP address
-    wan["internet"]["ip_address"] = wan[wan["internet"]["unit"]]["main"][
-        "ip_address"
-    ]
+    wan_unit = wan["internet"].get("unit")
+    wan_interface = wan.get(wan_unit)
+    if isinstance(wan_interface, dict):
+        main_interface = wan_interface.get("main")
+        if isinstance(main_interface, dict):
+            wan["internet"]["ip_address"] = main_interface.get("ip_address")
+    else:
+        _LOGGER.warning("Unable to select WAN interface for unit %r", wan_unit)
 
     return wan
 

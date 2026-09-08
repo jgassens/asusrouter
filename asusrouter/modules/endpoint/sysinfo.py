@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from asusrouter.modules.data import AsusData
@@ -9,6 +10,14 @@ from asusrouter.modules.wlan import WLAN_TYPE, Wlan
 from asusrouter.tools.cleaners import clean_content
 from asusrouter.tools.converters import safe_float, safe_int
 from asusrouter.tools.readers import read_json_content
+
+_LOGGER = logging.getLogger(__name__)
+
+_CONNECTION_FIELDS = 2
+_JFFS_FIELDS = 2
+_LOAD_AVERAGE_FIELDS = 3
+_MEMORY_FIELDS = 8
+_WLAN_FIELDS = 3
 
 
 def read(content: str, **kwargs: Any) -> dict[str, Any]:
@@ -35,6 +44,13 @@ def process(data: dict[str, Any]) -> dict[AsusData, Any]:
     wlan_info = {}
     i = 0
     while wlan_data := data.get(f"wlc_{i}_arr"):
+        if (
+            not isinstance(wlan_data, (list, tuple))
+            or len(wlan_data) < _WLAN_FIELDS
+        ):
+            _LOGGER.warning("Skipping malformed WLAN sysinfo array %d", i)
+            i += 1
+            continue
         name = WLAN_TYPE.get(i, Wlan.UNKNOWN)
         wlan_info[name] = {
             "client_associated": safe_int(wlan_data[0]),
@@ -47,26 +63,38 @@ def process(data: dict[str, Any]) -> dict[AsusData, Any]:
     # Connections info
     connections_info = {}
     connections_data = data.get("conn_stats_arr")
-    if connections_data:
+    if (
+        isinstance(connections_data, (list, tuple))
+        and len(connections_data) >= _CONNECTION_FIELDS
+    ):
         connections_info = {
             "total": safe_int(connections_data[0]),
             "active": safe_int(connections_data[1]),
         }
+    elif connections_data:
+        _LOGGER.warning("Skipping malformed connection sysinfo array")
     sysinfo["connections"] = connections_info
 
     # Memory info
     memory_info = {}
     memory_data = data.get("mem_stats_arr")
-    if memory_data:
+    if (
+        isinstance(memory_data, (list, tuple))
+        and len(memory_data) >= _MEMORY_FIELDS
+    ):
         # Before 388.7
         # JFFS data is presented as a string of `XX.xx / YY.yy MB`
         # where `XX.xx` is the used space (float) and `YY.yy` is
         # the total space (float)
         jffs = memory_data[7]
-        if "/" in jffs:
+        if isinstance(jffs, str) and "/" in jffs:
             jffs_data = jffs[:-3].split(" / ")
             jffs_used = safe_float(jffs_data[0])
-            jffs_total = safe_float(jffs_data[1])
+            jffs_total = (
+                safe_float(jffs_data[1])
+                if len(jffs_data) >= _JFFS_FIELDS
+                else None
+            )
             jffs_free = (
                 jffs_total - jffs_used if jffs_used and jffs_total else None
             )
@@ -89,17 +117,24 @@ def process(data: dict[str, Any]) -> dict[AsusData, Any]:
             "jffs_used": jffs_used,
             "jffs_total": jffs_total,
         }
+    elif memory_data:
+        _LOGGER.warning("Skipping malformed memory sysinfo array")
     sysinfo["memory"] = memory_info
 
     # Load average info
     load_avg_info = {}
     load_avg_data = data.get("cpu_stats_arr")
-    if load_avg_data:
+    if (
+        isinstance(load_avg_data, (list, tuple))
+        and len(load_avg_data) >= _LOAD_AVERAGE_FIELDS
+    ):
         load_avg_info = {
             1: safe_float(load_avg_data[0]),
             5: safe_float(load_avg_data[1]),
             15: safe_float(load_avg_data[2]),
         }
+    elif load_avg_data:
+        _LOGGER.warning("Skipping malformed CPU sysinfo array")
     sysinfo["load_avg"] = load_avg_info
 
     # Sysinfo as it is

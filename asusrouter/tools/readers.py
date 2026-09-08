@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from asusrouter.const import ContentType
+from asusrouter.error import AsusRouterDataError
 from asusrouter.tools.converters import (
     clean_input,
     safe_bool,
@@ -213,6 +214,12 @@ def read_json_content(content: str | None, **kwargs: Any) -> dict[str, Any]:
             ex,
         )
         return {}
+    except RecursionError as ex:
+        _LOGGER.warning(
+            "read_json_content rejected excessively nested body of length %d",
+            len(content),
+        )
+        raise AsusRouterDataError("JSON response is nested too deeply") from ex
 
 
 @clean_input

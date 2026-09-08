@@ -231,7 +231,10 @@ async def test_scalar_save_does_not_freshen_invalidated_rules(
     assert state.timestamp == timestamp
     assert state.data is previous
     assert state.data["rules"] is rules
-    assert state.data["state"] is True
+    key = "block_all" if isinstance(scalar, AsusBlockAll) else "state"
+    assert state.data[key] is True
+    other_key = "state" if key == "block_all" else "block_all"
+    assert bool(state.data[other_key]) is False
 
     await cached_router.async_get_data(AsusData.PARENTAL_CONTROL)
     fetch.assert_awaited_once()

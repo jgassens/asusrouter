@@ -46,6 +46,10 @@ HOOK_PC = [
 
 
 DEFAULT_PC_TIMEMAP = "W03E21000700<W04122000800"
+MAX_PC_NAME_LENGTH = 32
+
+_PC_FIELD_DELIMITERS = (">", "<", "&#62", "&#60")
+_PC_CONTROL_CHARACTER_LIMIT = 0x20
 
 
 @dataclass(frozen=True)
@@ -269,6 +273,8 @@ async def set_rule(
     action = add_rule
     if rule.type == PCRuleType.REMOVE:
         action = remove_rule
+    elif check_rule(rule) is None:
+        return False
 
     # Perform the action
     current_rules = action(current_rules, rule)
@@ -287,7 +293,7 @@ async def set_rule(
     )
 
 
-def check_rule(
+def check_rule(  # noqa: C901, PLR0911
     rule: ParentalControlRule | None,
 ) -> ParentalControlRule | None:
     """Check the parental control rule."""
@@ -308,6 +314,28 @@ def check_rule(
     ):
         return None
 
+    if rule.name is not None and not isinstance(rule.name, str):
+        _LOGGER.error("Invalid parental control rule name")
+        return None
+    if rule.timemap is not None and not isinstance(rule.timemap, str):
+        _LOGGER.error("Invalid parental control rule timemap")
+        return None
+
+    for field_name, value in (("name", rule.name), ("timemap", rule.timemap)):
+        if not value or (
+            value == DEFAULT_PC_TIMEMAP and field_name == "timemap"
+        ):
+            continue
+        if any(token in value for token in _PC_FIELD_DELIMITERS) or any(
+            ord(character) < _PC_CONTROL_CHARACTER_LIMIT for character in value
+        ):
+            _LOGGER.error(
+                "Parental control rule %s contains an unsafe delimiter or "
+                "control character",
+                field_name,
+            )
+            return None
+
     # Check that timemap is available and valid
     if not (rule.timemap or "").strip():
         rule.timemap = DEFAULT_PC_TIMEMAP
@@ -315,6 +343,13 @@ def check_rule(
     # Check that name is available
     if not (rule.name or "").strip():
         rule.name = rule.mac
+
+    if len(rule.name) > MAX_PC_NAME_LENGTH:
+        _LOGGER.error(
+            "Parental control rule name exceeds %d characters",
+            MAX_PC_NAME_LENGTH,
+        )
+        return None
 
     # Return the rule
     return rule
@@ -410,12 +445,17 @@ def read_pc_rules(data: dict[str, Any]) -> dict[str, ParentalControlRule]:
     for rule_mac, rule_name, rule_timemap, rule_type in zip(
         *vectors.values(), strict=True
     ):
+        type_code = safe_int(rule_type, default=-999)
         # Map the values
         rule = ParentalControlRule(
             mac=safe_return(rule_mac),
             name=rule_name,
             timemap=rule_timemap,
-            type=PCRuleType(safe_int(rule_type, default=-999)),
+            type=(
+                PCRuleType(type_code)
+                if type_code in PCRuleType._value2member_map_
+                else PCRuleType.UNKNOWN
+            ),
         )
 
         # Append the rule to the list

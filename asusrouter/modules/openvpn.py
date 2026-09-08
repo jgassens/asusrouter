@@ -13,6 +13,8 @@ from asusrouter.tools.converters import get_arguments
 _LOGGER = logging.getLogger(__name__)
 
 REQUIRE_IDENTITY = True
+OPENVPN_ID_MIN = 1
+OPENVPN_ID_MAX = 5
 
 
 class AsusOVPNClient(IntEnum):
@@ -61,8 +63,12 @@ async def set_state(
     # Get the arguments
     vpn_id, identity = get_arguments(("id", "identity"), **kwargs)
 
-    if not vpn_id:
-        _LOGGER.debug("No VPN id found in arguments")
+    if (
+        not isinstance(vpn_id, int)
+        or isinstance(vpn_id, bool)
+        or not OPENVPN_ID_MIN <= vpn_id <= OPENVPN_ID_MAX
+    ):
+        _LOGGER.debug("Invalid VPN id found in arguments: %r", vpn_id)
         return False
 
     service_arguments = {"id": vpn_id}

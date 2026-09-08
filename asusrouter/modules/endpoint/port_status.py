@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from asusrouter.error import AsusRouterDataError
 from asusrouter.modules.data import AsusData
 from asusrouter.modules.ports import (
     PORT_CAP2TYPE,
@@ -24,6 +25,7 @@ from asusrouter.tools.readers import read_json_content as read
 __all__ = ["read"]
 
 _LOGGER = logging.getLogger(__name__)
+_MIN_PORT_ID_LENGTH = 2
 
 
 def process(data: dict[str, Any]) -> dict[AsusData, Any]:
@@ -44,15 +46,24 @@ def process(data: dict[str, Any]) -> dict[AsusData, Any]:
 
     # Port info
     port_info = data.get("port_info", {})
-    if port_info:
+    if port_info and not isinstance(port_info, dict):
+        _LOGGER.warning("Ignoring malformed port_info value")
+    elif port_info:
         for mac, info in port_info.items():
+            if not isinstance(info, dict):
+                _LOGGER.warning("Skipping malformed port data for %r", mac)
+                continue
             ports[mac] = {}
 
             for port, values in info.items():
                 # Process the port info
-                port_description, port_type, port_id = process_port_info(
-                    port, values
-                )
+                try:
+                    port_description, port_type, port_id = process_port_info(
+                        port, values
+                    )
+                except AsusRouterDataError as ex:
+                    _LOGGER.warning("Skipping malformed port row: %s", ex)
+                    continue
 
                 # Create a port type group if it doesn't exist yet
                 if port_type not in ports[mac]:
@@ -77,15 +88,22 @@ def process_node_info(data: dict[str, Any]) -> dict[str, Any]:
     return dict(node_info.items())
 
 
-def process_port_info(
+def process_port_info(  # noqa: C901
     port: str, values: dict[str, Any]
 ) -> tuple[dict[str, Any], PortType, int]:
     """Process port info data."""
+
+    if not isinstance(port, str) or len(port) < _MIN_PORT_ID_LENGTH:
+        raise AsusRouterDataError(f"Invalid port identifier: {port!r}")
+    if not isinstance(values, dict):
+        raise AsusRouterDataError(f"Invalid values for port {port!r}")
 
     # The port is a string with the format `port_label:port_id`
     # e.g. `L1` for LAN port 1 or `W0` for WAN port 0 (the main)
     # port_label = port[0]
     port_id = safe_int(port[1])
+    if not isinstance(port_id, int):
+        raise AsusRouterDataError(f"Invalid port identifier: {port!r}")
 
     # Get the capabilities of the port
     port_capabilities = int_as_capabilities(

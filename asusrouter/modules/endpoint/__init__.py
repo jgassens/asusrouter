@@ -196,10 +196,18 @@ def process(
             if isinstance(result, dict):
                 return result
             return {}
-        # Consider attribute and value errors to be possible
-        # in case of unexpected data structure
-        except (AttributeError, ValueError) as ex:
-            _LOGGER.error(
+        # Treat malformed router payloads as an unavailable endpoint result.
+        # Forced reads convert the omitted datatype into AsusRouterDataError;
+        # ordinary reads retain their cached fallback.
+        except (
+            AttributeError,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            RecursionError,
+        ) as ex:
+            _LOGGER.warning(
                 "Error processing data from endpoint %s: %s",
                 endpoint,
                 ex,

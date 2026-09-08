@@ -206,3 +206,45 @@ async def test_set_state(
         )
     else:
         callback.assert_not_called()
+
+
+@pytest.mark.parametrize("vpn_id", ["1;reboot", "1 ", True, 0, 99])
+async def test_set_state_rejects_unsafe_client_id(
+    vpn_id: object,
+) -> None:
+    """Only bounded integer IDs may enter an rc_service command."""
+
+    callback = AsyncMock()
+
+    assert (
+        await set_state(
+            callback=callback,
+            state=AsusOVPNClient.ON,
+            id=vpn_id,
+            identity=identity_mock["merlin_new"],
+        )
+        is False
+    )
+    callback.assert_not_awaited()
+
+
+async def test_set_state_accepts_bounded_integer_client_id() -> None:
+    """A valid client ID produces the exact expected service command."""
+
+    callback = AsyncMock(return_value=True)
+
+    assert (
+        await set_state(
+            callback=callback,
+            state=AsusOVPNClient.ON,
+            id=1,
+            identity=identity_mock["merlin_new"],
+        )
+        is True
+    )
+    callback.assert_awaited_once_with(
+        service="start_vpnclient1",
+        arguments={"id": 1},
+        apply=True,
+        expect_modify=False,
+    )

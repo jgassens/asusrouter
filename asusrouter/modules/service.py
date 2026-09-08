@@ -58,9 +58,8 @@ async def async_call_service(
     if service is not None:
         commands["rc_service"] = service
 
-    # Check arguments
-    if not arguments:
-        arguments = {}
+    # Never add service metadata to a mapping owned by the caller.
+    arguments = dict(arguments) if arguments else {}
 
     # Add apply command if requested
     if apply:

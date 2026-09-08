@@ -117,3 +117,18 @@ async def test_async_call_service_with_invalid_service() -> None:
 
     with pytest.raises(AsusRouterServiceError):
         await async_call_service(invalid_callback, "restart_httpd")
+
+
+async def test_async_call_service_does_not_mutate_arguments() -> None:
+    """Service metadata is added to a private copy of caller arguments."""
+
+    arguments = {"id": "1"}
+
+    await async_call_service(
+        callback,
+        "restart_httpd",
+        arguments=arguments,
+        apply=True,
+    )
+
+    assert arguments == {"id": "1"}
