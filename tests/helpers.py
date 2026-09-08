@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any, Protocol, cast
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -12,6 +12,28 @@ from asusrouter.modules.source import ARDataSource, ARDataStateDynamic
 AsyncPatch = Callable[..., AsyncMock]
 SyncPatch = Callable[..., Mock]
 ConnectionFactory = Callable[..., Connection]
+
+
+def mock_response(
+    status: int,
+    headers: dict[str, str],
+    body: str | bytes,
+    charset: str | None = "utf-8",
+) -> Mock:
+    """Create an aiohttp-like response double with a streamed body."""
+
+    raw = body.encode(charset or "utf-8") if isinstance(body, str) else body
+
+    def iter_chunked(size: int) -> AsyncIterator[bytes]:
+        async def _iterate() -> AsyncIterator[bytes]:
+            for start in range(0, len(raw), size):
+                yield raw[start : start + size]
+
+        return _iterate()
+
+    response = Mock(status=status, headers=headers, charset=charset)
+    response.content = Mock(iter_chunked=iter_chunked)
+    return response
 
 
 class MakeStateFactory(Protocol):

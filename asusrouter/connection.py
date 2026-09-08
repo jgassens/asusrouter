@@ -109,18 +109,6 @@ def _response_size_error(endpoint: EndpointType) -> AsusRouterDataError:
     )
 
 
-async def _read_legacy_response_content(
-    response: aiohttp.ClientResponse,
-) -> str:
-    """Read content from a response double without a byte stream."""
-
-    try:
-        return await response.text()
-    except UnicodeDecodeError:
-        _LOGGER.debug("Cannot decode response. Will ignore errors")
-        return await response.text(errors="ignore")
-
-
 async def _read_response_content(
     response: aiohttp.ClientResponse,
     endpoint: EndpointType,
@@ -140,20 +128,10 @@ async def _read_response_content(
     # aiohttp transparently decompresses response.content, so the running
     # limit applies to the decompressed representation.
     body = bytearray()
-    chunks = response.content.iter_chunked(_RESPONSE_CHUNK_SIZE)
-    if not hasattr(chunks, "__aiter__"):
-        return await _read_legacy_response_content(response)
-    async for chunk in chunks:
+    async for chunk in response.content.iter_chunked(_RESPONSE_CHUNK_SIZE):
         if len(body) + len(chunk) > MAX_RESPONSE_SIZE:
             raise _response_size_error(endpoint)
         body.extend(chunk)
-
-    if (
-        not body
-        and not isinstance(response, aiohttp.ClientResponse)
-        and asyncio.iscoroutinefunction(response.text)
-    ):
-        return await _read_legacy_response_content(response)
 
     encoding = response.charset
     if not isinstance(encoding, str):
@@ -853,23 +831,14 @@ class Connection:  # pylint: disable=too-many-instance-attributes
         # Process the payload to be sent
         payload_to_send = quote(payload) if payload else None
 
-        request_kwargs: dict[str, Any] = {
-            "data": (
-                payload_to_send if request_type == RequestType.POST else None
-            ),
-            "headers": headers,
-            "ssl": self.config.get(ARCCKey.VERIFY_SSL),
-        }
-        # The supported session type is aiohttp.ClientSession. Keeping this
-        # check also lets lightweight response doubles omit aiohttp options.
-        if isinstance(self._session, aiohttp.ClientSession):
-            request_kwargs["allow_redirects"] = False
-
         # Send the request
         async with self._session.request(
             request_type.value,
             url,
-            **request_kwargs,
+            data=payload_to_send if request_type == RequestType.POST else None,
+            headers=headers,
+            ssl=self.config.get(ARCCKey.VERIFY_SSL),
+            allow_redirects=False,
         ) as response:
             # Read the status code
             resp_status = response.status

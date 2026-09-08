@@ -10,7 +10,7 @@ import pytest
 from asusrouter.connection_config import ARConnectionConfigKey as ARCCKey
 from asusrouter.const import DEFAULT_PORT_HTTP, RequestType
 from asusrouter.modules.endpoint import EndpointService
-from tests.helpers import AsyncPatch, ConnectionFactory
+from tests.helpers import AsyncPatch, ConnectionFactory, mock_response
 
 
 class TestConnectionMakeRequest:
@@ -36,11 +36,7 @@ class TestConnectionMakeRequest:
     ) -> MagicMock:
         """Create a mock response."""
 
-        mock_response = MagicMock()
-        mock_response.status = status
-        mock_response.headers = headers
-        mock_response.text = AsyncMock(return_value=text)
-        return mock_response
+        return mock_response(status, headers, text)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -193,6 +189,7 @@ class TestConnectionMakeRequest:
             data=expected_data,
             headers=self.DEFAULT_HEADERS,
             ssl=connection.config.get(ARCCKey.VERIFY_SSL),
+            allow_redirects=False,
         )
 
         # Check result
@@ -250,18 +247,10 @@ class TestConnectionMakeRequest:
         mock_session.closed = False
         connection._session = mock_session
 
-        # Patch response to raise UnicodeDecodeError then succeed
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.headers = {"h": "v"}
-        mock_response.text = AsyncMock(
-            side_effect=[
-                UnicodeDecodeError("utf-8", b"", 0, 1, "bad"),
-                "fixed",
-            ]
+        # Body is not valid UTF-8; undecodable bytes must be dropped
+        mock_cm = self._create_mock_context_manager(
+            mock_response(200, {"h": "v"}, b"fix\xffed")
         )
-
-        mock_cm = self._create_mock_context_manager(mock_response)
         mock_session.request = MagicMock(return_value=mock_cm)
         connection._dumpback = AsyncMock()
 

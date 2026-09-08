@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 
 from asusrouter.modules.endpoint import EndpointService
-from tests.helpers import AsyncPatch, ConnectionFactory, SyncPatch
+from tests.helpers import (
+    AsyncPatch,
+    ConnectionFactory,
+    SyncPatch,
+    mock_response,
+)
 
 
 @pytest.mark.asyncio
@@ -108,11 +113,7 @@ async def test_closed_session_during_login_completes_before_timeout(
     """A login recreates its session without waiting for its own timeout."""
 
     connection = connection_factory(session=Mock(closed=True), timeout=0.05)
-    response = Mock(
-        status=200,
-        headers={},
-        text=AsyncMock(return_value='{"asus_token": "recovered-token"}'),
-    )
+    response = mock_response(200, {}, '{"asus_token": "recovered-token"}')
     context = AsyncMock()
     context.__aenter__.return_value = response
     session = MagicMock(closed=False)

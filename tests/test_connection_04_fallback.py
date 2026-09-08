@@ -22,7 +22,12 @@ from asusrouter.error import (
     AsusRouterNotImplementedError,
 )
 from asusrouter.modules.endpoint import EndpointService
-from tests.helpers import AsyncPatch, ConnectionFactory, SyncPatch
+from tests.helpers import (
+    AsyncPatch,
+    ConnectionFactory,
+    SyncPatch,
+    mock_response,
+)
 
 CUSTOM_HTTP = DEFAULT_PORT_HTTP + 5
 CUSTOM_HTTPS = DEFAULT_PORT_HTTPS + 5
@@ -222,14 +227,10 @@ class TestConnectionFallback:
                 raise aiohttp.ClientConnectorError(
                     Mock(), OSError("unreachable port")
                 )
-            response = Mock(
-                status=200,
-                headers={},
-                text=AsyncMock(
-                    return_value=json.dumps(
-                        {"asus_token": f"token-{len(urls) - 1}"}
-                    )
-                ),
+            response = mock_response(
+                200,
+                {},
+                json.dumps({"asus_token": f"token-{len(urls) - 1}"}),
             )
             context = AsyncMock()
             context.__aenter__.return_value = response
