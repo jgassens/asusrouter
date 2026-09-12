@@ -53,18 +53,18 @@ _SENSITIVE_KEY_ALTERNATION = "|".join(
 _TEXT_ASSIGNMENT = re.compile(
     r"""(?<![A-Za-z0-9_-])"""
     r"""(?P<key>["']?(?:[A-Za-z0-9]+[_-])*"""
-    rf"""(?:{_SENSITIVE_KEY_ALTERNATION})\d*["']?)"""
+    rf"""(?:{_SENSITIVE_KEY_ALTERNATION})_?\d*["']?)"""
     r"""[ \t]*(?P<sep>[:=])[ \t]*"""
     r"""(?P<value>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\r\n}\]]*)""",
     re.IGNORECASE,
 )
-_TRAILING_DIGITS = re.compile(r"\d+$")
+_TRAILING_DIGITS = re.compile(r"_?\d+$")
 
 
 def _is_sensitive_key(key: object) -> bool:
     """Return whether a key identifies secret data."""
 
-    # `wl0_key1` .. `wl0_key4` and friends are numbered secrets.
+    # `wl0_key1` .. `wl0_key4`, `psk_1` and friends are numbered secrets.
     normalized = _TRAILING_DIGITS.sub(
         "", str(key).casefold().replace("-", "_")
     )

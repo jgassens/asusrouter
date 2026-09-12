@@ -38,8 +38,10 @@
 - Parental control: `check_rule` rejects a MAC that is not colon-separated
   hex, since the MAC is written into the delimited rule table and doubles
   as the default name.
-- Every request carries the configured timeout even on a caller-supplied
-  session, so a dripping response cannot stay open indefinitely.
+- Every request carries the configured timeout (default 15 s) even on a
+  caller-supplied session, so a dripping response cannot stay open
+  indefinitely. This replaces, rather than merges with, a longer timeout
+  set on the session; pass `timeout=` to `AsusRouter` for a slow router.
 - Parsers: an oversized integer literal, a non-numeric `error_status` and
   an uptime beyond the datetime range no longer escape as raw
   `ValueError`/`OverflowError`.

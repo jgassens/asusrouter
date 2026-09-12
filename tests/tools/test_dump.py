@@ -226,6 +226,8 @@ def test_loose_text_redacts_only_sensitive_values() -> None:
             "SENTINEL",
         ),
         ("wgc1_private_key=SENTINEL\nx=1", "x=1", "SENTINEL"),
+        ("psk_1=SENTINEL\nx=1", "x=1", "SENTINEL"),
+        ("wl0_wpa_psk_2=SENTINEL\nx=1", "x=1", "SENTINEL"),
     ],
 )
 def test_loose_text_redaction_covers_router_shapes(
