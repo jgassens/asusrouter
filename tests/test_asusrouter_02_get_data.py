@@ -15,7 +15,6 @@ from asusrouter.modules.source import (
     ARDataStateDynamic,
     ARDataStateStatic,
     ARDataType,
-    ARDataTypeGeneric,
 )
 from tests.helpers import (
     BindStateFactory,
@@ -24,6 +23,12 @@ from tests.helpers import (
     assert_state_not_updated,
     assert_state_updated,
 )
+
+
+class _TestDataType(ARDataType):
+    """Concrete data type for exercising static data state creation."""
+
+    UNKNOWN = "unknown"
 
 
 def test_get_callback_for_state(
@@ -41,7 +46,7 @@ def test_get_callback_for_state(
     ("source", "expected_return", "expected_state_type", "prepopulate"),
     [
         (ARDataSource(), True, ARDataStateDynamic, False),
-        (ARDataTypeGeneric.UNKNOWN, True, ARDataStateStatic, False),
+        (_TestDataType.UNKNOWN, True, ARDataStateStatic, False),
         (object(), False, None, False),
         (ARDataSource(), True, "sentinel", True),
     ],

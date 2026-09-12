@@ -77,38 +77,6 @@ class TestARSecurityLevel:
     @pytest.mark.parametrize(
         ("level", "result"),
         [
-            (ARSecurityLevel.STRICT, True),
-            (ARSecurityLevel.DEFAULT, True),
-            (ARSecurityLevel.SANITIZED, True),
-            (ARSecurityLevel.UNSAFE, True),
-        ],
-    )
-    def test_at_least_strict(
-        self, level: ARSecurityLevel, result: bool
-    ) -> None:
-        """Test at_least_strict method."""
-
-        assert ARSecurityLevel.at_least_strict(level) is result
-
-    @pytest.mark.parametrize(
-        ("level", "result"),
-        [
-            (ARSecurityLevel.STRICT, False),
-            (ARSecurityLevel.DEFAULT, True),
-            (ARSecurityLevel.SANITIZED, True),
-            (ARSecurityLevel.UNSAFE, True),
-        ],
-    )
-    def test_at_least_default(
-        self, level: ARSecurityLevel, result: bool
-    ) -> None:
-        """Test at_least_default method."""
-
-        assert ARSecurityLevel.at_least_default(level) is result
-
-    @pytest.mark.parametrize(
-        ("level", "result"),
-        [
             (ARSecurityLevel.STRICT, False),
             (ARSecurityLevel.DEFAULT, False),
             (ARSecurityLevel.SANITIZED, True),

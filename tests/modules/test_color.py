@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from asusrouter.modules.color import (
@@ -263,36 +261,6 @@ class TestColorRGB:
         assert (color._r, color._g, color._b) == expected
 
     @pytest.mark.parametrize(
-        ("rgb", "scale", "expected"),
-        [
-            # This will scale to the default 128 scale
-            ((100, 150, 200), 128, (64, 96, 128)),
-            ("100,150,200", 128, (64, 96, 128)),
-            # This will scale to the 255 scale
-            ((32, 64, 96), 255, (32, 64, 96)),
-            # Other input
-            ((100,), 255, (100, 0, 0)),
-            ("100", 255, (100, 0, 0)),
-            (None, 255, (0, 0, 0)),
-        ],
-    )
-    def test_from_rgbs(
-        self,
-        rgb: str | tuple[int, ...] | None,
-        scale: int | None,
-        expected: tuple[int, int, int] | None,
-    ) -> None:
-        """Test from_rgbs."""
-
-        with patch.object(ColorRGB, "from_rgb") as mock_from_rgb:
-            color = ColorRGB()
-            color.from_rgbs(rgb, scale=scale)
-
-            assert mock_from_rgb.call_count == 2
-
-            assert color._scale == scale
-
-    @pytest.mark.parametrize(
         ("input_rgb", "expected"),
         [
             # Correct input
@@ -392,13 +360,13 @@ class TestColorRGB:
         assert hash(color) == expected
 
     @pytest.mark.parametrize(
-        ("input_rgb", "r", "g", "b", "scale", "color_brightness"),
+        ("input_rgb", "r", "g", "b", "scale"),
         [
             # Correct input
-            ((100, 150, 200), 64, 96, 128, 128, 128),
-            ((100,), 100, 0, 0, 128, 100),
+            ((100, 150, 200), 64, 96, 128, 128),
+            ((100,), 100, 0, 0, 128),
             # Wrong input
-            (None, 0, 0, 0, 128, 0),
+            (None, 0, 0, 0, 128),
         ],
     )
     def test_properties(
@@ -408,7 +376,6 @@ class TestColorRGB:
         g: int,
         b: int,
         scale: int,
-        color_brightness: int,
     ) -> None:
         """Test properties."""
 
@@ -417,7 +384,6 @@ class TestColorRGB:
         assert color.g == g
         assert color.b == b
         assert color.scale == scale
-        assert color.color_brightness == color_brightness
 
 
 class TestColorRGBB:

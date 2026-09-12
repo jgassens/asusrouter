@@ -173,17 +173,6 @@ class ColorRGB:
         # Set the RGB values
         self._r, self._g, self._b = rgb
 
-    def from_rgbs(
-        self,
-        rgb: tuple[int, int, int] | str,
-        delimiter: str = DEFAULT_COLOR_DELIMITER,
-        scale: int | None = None,
-    ) -> None:
-        """Load a color from RGB + Scale values."""
-
-        self._scale = scale or self._scale
-        self.from_rgb(rgb, delimiter)
-
     def as_tuple(self) -> tuple[int, int, int]:
         """Return the color as tuple."""
 
@@ -239,12 +228,6 @@ class ColorRGB:
         """Return the scale of the color."""
 
         return self._scale
-
-    @property
-    def color_brightness(self) -> int:
-        """Return the brightness of the color."""
-
-        return max(self._r, self._g, self._b)
 
 
 class ColorRGBB(ColorRGB):

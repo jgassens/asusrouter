@@ -2,6 +2,11 @@
 
 ## 2.0.0+jgassens.3
 
+- Removed the unused masking and legacy port-forwarding writer modules and the
+  three legacy whole-table port-forwarding methods. Also removed unused data
+  unit conversion, timestamp, list, reader, security, color, source and
+  registry helpers, plus the obsolete `DeviceOperationMode` and `AccessPoint`
+  types.
 - Connection: a caller's own cancellation now propagates instead of being
   swallowed as a failed connect; the login fallback no longer cancels the
   task it runs inside; a login on a closed session no longer awaits itself.

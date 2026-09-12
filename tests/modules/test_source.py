@@ -17,10 +17,16 @@ from asusrouter.modules.source import (
     ARDataState,
     ARDataStateDynamic,
     ARDataStateStatic,
-    ARDataTypeGeneric,
+    ARDataType,
 )
 
 datetime_value = datetime(2025, 8, 1, 12, 1, 5)
+
+
+class _TestDataType(ARDataType):
+    """Concrete data type for exercising the source infrastructure."""
+
+    UNKNOWN = "unknown"
 
 
 class TestARDataCollection:
@@ -30,9 +36,9 @@ class TestARDataCollection:
         ("source", "length"),
         [
             (ARDataSource(), 1),
-            ([ARDataSource(), ARDataTypeGeneric.UNKNOWN], 2),
-            ({ARDataSource(), ARDataTypeGeneric.UNKNOWN, ARDataSource()}, 3),
-            (list(ARDataTypeGeneric), 1),
+            ([ARDataSource(), _TestDataType.UNKNOWN], 2),
+            ({ARDataSource(), _TestDataType.UNKNOWN, ARDataSource()}, 3),
+            (list(_TestDataType), 1),
         ],
     )
     def test_from_value_valid(self, source: Any, length: int) -> None:
@@ -54,13 +60,11 @@ class TestARDataCollection:
 
         _ar_data_source = ARDataSource()
 
-        source = (
-            item for item in [_ar_data_source, ARDataTypeGeneric.UNKNOWN]
-        )
+        source = (item for item in [_ar_data_source, _TestDataType.UNKNOWN])
         collection = ARDataCollection.from_value(source)
 
         assert collection is not None
-        assert list(collection) == [_ar_data_source, ARDataTypeGeneric.UNKNOWN]
+        assert list(collection) == [_ar_data_source, _TestDataType.UNKNOWN]
 
     @pytest.mark.parametrize(
         "source",
@@ -95,7 +99,7 @@ class TestARDataCollection:
     def test_iter(self) -> None:
         """Test iteration over the collection."""
 
-        source_items = [ARDataSource(), ARDataTypeGeneric.UNKNOWN]
+        source_items = [ARDataSource(), _TestDataType.UNKNOWN]
         collection = ARDataCollection.from_value(source_items)
 
         assert collection is not None
@@ -104,7 +108,7 @@ class TestARDataCollection:
     def test_len(self) -> None:
         """Test the length of the collection."""
 
-        source_items = [ARDataSource(), ARDataTypeGeneric.UNKNOWN]
+        source_items = [ARDataSource(), _TestDataType.UNKNOWN]
         collection = ARDataCollection.from_value(source_items)
 
         assert collection is not None
@@ -113,7 +117,7 @@ class TestARDataCollection:
     def test_getitem(self) -> None:
         """Test that slicing and indexing returns correct types."""
 
-        source_items = [ARDataSource(), ARDataTypeGeneric.UNKNOWN]
+        source_items = [ARDataSource(), _TestDataType.UNKNOWN]
         collection = ARDataCollection.from_value(source_items)
 
         assert collection is not None
@@ -138,7 +142,7 @@ class TestARDataCollection:
     def test_repr(self) -> None:
         """Test the string representation of the collection."""
 
-        source_items = [ARDataSource(), ARDataTypeGeneric.UNKNOWN]
+        source_items = [ARDataSource(), _TestDataType.UNKNOWN]
         collection = ARDataCollection.from_value(source_items)
 
         assert collection is not None
@@ -154,7 +158,7 @@ class TestARDataState:
         [
             # Valid types
             (ARDataSource(), True),
-            (ARDataTypeGeneric.UNKNOWN, True),
+            (_TestDataType.UNKNOWN, True),
             # Invalid types
             (object(), False),
             ("string", False),
@@ -197,7 +201,7 @@ class TestARDataState:
         mock_now = Mock(return_value=datetime_value)
         monkeypatch.setattr(source, "datetime", SimpleNamespace(now=mock_now))
 
-        instance = ARDataState(ARDataTypeGeneric.UNKNOWN)
+        instance = ARDataState(_TestDataType.UNKNOWN)
         instance.update(content)
 
         mock_now.assert_called_once_with(UTC)
@@ -211,7 +215,7 @@ class TestARDataState:
     ) -> None:
         """Test the is_fresh method."""
 
-        instance = ARDataState(ARDataTypeGeneric.UNKNOWN)
+        instance = ARDataState(_TestDataType.UNKNOWN)
 
         threshold = timedelta(seconds=5)
 
@@ -253,7 +257,7 @@ class TestARDataState:
     def test_is_fresh_invalid_threshold(self, threshold: Any) -> None:
         """Test the is_fresh method with invalid threshold."""
 
-        instance = ARDataState(ARDataTypeGeneric.UNKNOWN)
+        instance = ARDataState(_TestDataType.UNKNOWN)
 
         with pytest.raises(TypeError, match="A valid `timedelta` is required"):
             instance.is_fresh(threshold=threshold)
@@ -261,7 +265,7 @@ class TestARDataState:
     def test_properties(self) -> None:
         """Test the properties."""
 
-        source = ARDataTypeGeneric.UNKNOWN
+        source = _TestDataType.UNKNOWN
         instance = ARDataState(source)
 
         async def mock_async_callback() -> None:
@@ -282,7 +286,6 @@ class TestARDataState:
 
         assert instance.source == source
         assert instance.content == "content"
-        assert instance.last_update == datetime_value
         assert instance.callback == mock_async_callback
         assert instance.state_caller == mock_async_callable
         assert instance.translate_caller == mock_async_translate
@@ -290,7 +293,7 @@ class TestARDataState:
     def test_setters(self) -> None:
         """Test the setters for the properties."""
 
-        instance = ARDataState(ARDataTypeGeneric.UNKNOWN)
+        instance = ARDataState(_TestDataType.UNKNOWN)
 
         async def mock_async_callback() -> None:
             """Mock an async callback."""
@@ -316,7 +319,7 @@ class TestARDataStateStatic:
     def test_init(self) -> None:
         """Test the initialization."""
 
-        inst_source = ARDataTypeGeneric.UNKNOWN
+        inst_source = _TestDataType.UNKNOWN
         instance = ARDataStateStatic(inst_source)
 
         assert isinstance(instance, ARDataStateStatic)
@@ -329,7 +332,7 @@ class TestARDataStateStatic:
     def test_property_source(self) -> None:
         """Test the source property."""
 
-        inst_source = ARDataTypeGeneric.UNKNOWN
+        inst_source = _TestDataType.UNKNOWN
         instance = ARDataStateStatic(inst_source)
 
         with patch(
@@ -365,7 +368,7 @@ class TestARDataStateDynamic:
         result = instance.source
         assert result == inst_source
 
-        inst_source_wrong = ARDataTypeGeneric.UNKNOWN
+        inst_source_wrong = _TestDataType.UNKNOWN
         instance = ARDataStateDynamic(inst_source_wrong)  # type: ignore[arg-type]
         result = instance.source
         # It should return a new instance of ARDataSource

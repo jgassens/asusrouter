@@ -13,48 +13,6 @@ from asusrouter.tools import converters
 
 
 @pytest.mark.parametrize(
-    ("input_value", "jitter", "expected_output"),
-    [
-        # Real values, jitter 1
-        (0, 1, 1),
-        (1, 1, 1),
-        (2, 1, 1),
-        (3, 1, 4),
-        (4, 1, 4),
-        (5, 1, 4),
-        (6, 1, 7),
-        (7, 1, 7),
-        (8, 1, 7),
-        # Real values, jitter vary
-        (0, 2, 2),
-        (11, 2, 12),
-        (0, 3, 3),
-        (1, 4, 4),
-        (5, 11, 11),
-        # Int-convertible values
-        ("2", 1, 1),
-        (0.9, 2, 2),
-        ("4.4", 1, 4),
-        # Wrong jitter returns the value unchanged
-        (15, -1, 15),
-        (77, 0, 77),
-        ("any", -1, "any"),
-        # Any non-int values are returned unchanged
-        (None, None, None),
-        ("None", None, "None"),
-        ("string", None, "string"),
-        (" ", None, " "),
-    ],
-)
-def test_clean_jitter(
-    input_value: Any, jitter: Any | None, expected_output: Any
-) -> None:
-    """Test clean_jitter method."""
-
-    assert converters.clean_jitter(input_value, jitter) == expected_output  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
     ("content", "result"),
     [
         (None, None),  # Not a string
@@ -525,25 +483,6 @@ def test_safe_int_nn(content: Any, result: int) -> None:
     assert converters.safe_int_nn(content) == result
 
 
-@pytest.mark.parametrize(
-    ("content", "result"),
-    [
-        (None, []),  # None content
-        ("test", ["test"]),  # Single value content
-        (1, [1]),
-        (1.0, [1.0]),
-        (True, [True]),
-        (False, [False]),
-        ([], []),  # List content
-        ([1, 2, 3], [1, 2, 3]),
-    ],
-)
-def test_safe_list(content: Any, result: list[Any]) -> None:
-    """Test safe_list method."""
-
-    assert converters.safe_list(content) == result
-
-
 def test_safe_list_csv() -> None:
     """Test safe_list_csv method."""
 
@@ -784,75 +723,3 @@ def test_safe_usage_historic(
         converters.safe_usage_historic(used, total, prev_used, prev_total)
         == result
     )
-
-
-@pytest.mark.parametrize(
-    ("value", "result"),
-    [
-        # Actual timestamp in milliseconds
-        (
-            1700515143689,
-            datetime(2023, 11, 20, 21, 19, 3, 689000, tzinfo=UTC),
-        ),
-        # None
-        (None, None),
-        # The beginning of the epoch
-        (0, datetime(1970, 1, 1, 0, 0, 0, tzinfo=UTC)),
-        # Random string
-        ("test", None),
-    ],
-)
-def test_safe_timestamp_to_utc(
-    value: int | None, result: datetime | None
-) -> None:
-    """Test safe_timestamp_to_utc method."""
-
-    assert converters.safe_timestamp_to_utc(value) == result
-
-
-@pytest.mark.parametrize(
-    ("value", "result"),
-    [
-        # Actual datetime
-        (
-            datetime(2023, 11, 20, 21, 19, 3, 689000, tzinfo=UTC),
-            1700515143.689,
-        ),
-        # None
-        (None, None),
-        # The beginning of the epoch
-        (datetime(1970, 1, 1, 0, 0, 0, tzinfo=UTC), 0),
-        # Random string
-        ("test", None),
-    ],
-)
-def test_safe_utc_to_timestamp(
-    value: datetime | None, result: float | None
-) -> None:
-    """Test safe_utc_to_timestamp method."""
-
-    assert converters.safe_utc_to_timestamp(value) == result
-
-
-@pytest.mark.parametrize(
-    ("value", "result"),
-    [
-        # Actual datetime
-        (
-            datetime(2023, 11, 20, 21, 19, 3, 689000, tzinfo=UTC),
-            1700515143689,
-        ),
-        # None
-        (None, None),
-        # The beginning of the epoch
-        (datetime(1970, 1, 1, 0, 0, 0, tzinfo=UTC), 0),
-        # Random string
-        ("test", None),
-    ],
-)
-def test_safe_utc_to_timestamp_milli(
-    value: datetime | None, result: int | None
-) -> None:
-    """Test safe_utc_to_timestamp_milli method."""
-
-    assert converters.safe_utc_to_timestamp_milli(value) == result

@@ -8,7 +8,6 @@ from enum import StrEnum
 import logging
 from typing import Any
 
-from asusrouter.const import UNKNOWN_MEMBER_STR
 from asusrouter.tools.enum import FromStrMixin
 from asusrouter.tools.types import ARCallableType, ARCallbackType
 
@@ -28,12 +27,6 @@ class ARDataSource:
 
 class ARDataType(FromStrMixin, StrEnum):
     """AsusRouter data type."""
-
-
-class ARDataTypeGeneric(ARDataType):
-    """AsusRouter generic data types."""
-
-    UNKNOWN = UNKNOWN_MEMBER_STR
 
 
 class ARDataCollection:
@@ -169,12 +162,6 @@ class ARDataState:
         """Get the content."""
 
         return self._content
-
-    @property
-    def last_update(self) -> datetime | None:
-        """Get the last update timestamp."""
-
-        return self._last_update
 
     @property
     def callback(self) -> ARCallbackType | None:

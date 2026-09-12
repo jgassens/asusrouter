@@ -38,23 +38,6 @@ def clean_input(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def clean_jitter(value: _T, jitter: int = 1) -> int | _T:
-    """Clean jitter from an integer value.
-
-    If input is int-compatible, remove unwanted jitter
-    `jitter` by lowering value resolution. If any other
-    non-compatible value is given, return it unchanged.
-    """
-
-    vint = safe_int(value)
-    jint = safe_int(jitter, default=1)
-    if isinstance(vint, int) and jint > 0:
-        block_size = 2 * jint + 1
-        return int(vint - (vint % block_size) + jint)
-
-    return value
-
-
 def clean_string(content: str | None) -> str | None:
     """Get a clean string or return None if it is empty."""
 
@@ -419,18 +402,6 @@ def safe_int_nn(content: Any) -> int:
     return result if isinstance(result, int) else 0
 
 
-def safe_list(content: Any) -> list[Any]:
-    """Read any content as a list."""
-
-    if isinstance(content, list):
-        return content
-
-    if content is None:
-        return []
-
-    return [content]
-
-
 def safe_list_csv(content: str | None) -> list[str]:
     """Read the list as comma separated values."""
 
@@ -595,41 +566,6 @@ def safe_usage_historic(
         return 0.0
 
     return safe_usage(used_diff, total_diff)
-
-
-def safe_timestamp_to_utc(value: int | None) -> datetime | None:
-    """Convert timestamp to UTC datetime."""
-
-    if value is None:
-        return None
-
-    try:
-        return datetime.fromtimestamp(value, UTC)
-    except (OverflowError, ValueError, TypeError, OSError):
-        try:
-            return datetime.fromtimestamp(value / 1000, UTC)
-        except (OverflowError, ValueError, TypeError, OSError):
-            return None
-
-
-def safe_utc_to_timestamp(value: datetime | None) -> float | None:
-    """Convert UTC datetime to timestamp."""
-
-    if value is None or not isinstance(value, datetime):
-        return None
-
-    return value.timestamp()
-
-
-def safe_utc_to_timestamp_milli(value: datetime | None) -> int | None:
-    """Convert UTC datetime to timestamp in milliseconds."""
-
-    _timestamp = safe_utc_to_timestamp(value)
-
-    if _timestamp is None:
-        return None
-
-    return int(_timestamp * 1000)
 
 
 def scale_value_int(

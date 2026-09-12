@@ -36,29 +36,6 @@ class ARCallableRegistryBase:
                 elif callable(value):
                     self._flags[value] = False
 
-    def unregister(self, source_cls: type) -> None:
-        """Remove all registrations for a source class."""
-
-        with self._lock:
-            self._map.pop(source_cls, None)
-            self._rebuild_flags()
-
-    def clear(self) -> None:
-        """Clear all registrations."""
-
-        with self._lock:
-            self._map.clear()
-            self._flags.clear()
-
-    def _rebuild_flags(self) -> None:
-        """Rebuild callable flag mapping from registered entries."""
-
-        self._flags.clear()
-        for entry in self._map.values():
-            for value in entry.values():
-                if isinstance(value, tuple):
-                    self._flags[value[0]] = bool(value[1])
-
     def _resolve_entry(self, source: Any, name: str) -> ARCallableEntry | None:
         """Resolve a registered entry for `source` and `name` by MRO."""
 
@@ -102,22 +79,6 @@ class ARCallableRegistryBase:
             if isinstance(value, tuple):
                 return bool(value[1])
             return self._flags.get(value, False)
-
-    def get_all_for(self, source: Any) -> dict[str, ARCallableEntry]:
-        """Return all resolved callables for `source` by name (MRO merged).
-
-        More specific classes override less specific ones.
-        """
-
-        cls = source if isinstance(source, type) else type(source)
-        merged: dict[str, ARCallableEntry] = {}
-        with self._lock:
-            # walk MRO from base -> subclass so subclasses override
-            for base in reversed(getattr(cls, "__mro__", ())):
-                entry = self._map.get(base)
-                if entry:
-                    merged.update(entry)
-        return merged
 
 
 ARCallableRegistry: ARCallableRegistryBase = ARCallableRegistryBase()
