@@ -220,6 +220,14 @@ def read_json_content(content: str | None, **kwargs: Any) -> dict[str, Any]:
             len(content),
         )
         raise AsusRouterDataError("JSON response is nested too deeply") from ex
+    except ValueError as ex:
+        # e.g. an integer literal beyond the interpreter's digit limit
+        _LOGGER.warning(
+            "read_json_content rejected body of length %d: %s",
+            len(content),
+            ex,
+        )
+        raise AsusRouterDataError("JSON response cannot be parsed") from ex
 
 
 @clean_input

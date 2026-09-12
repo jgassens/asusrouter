@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 import logging
+import re
 from typing import Any
 
 from asusrouter.error import AsusRouterDataError
@@ -49,6 +50,7 @@ DEFAULT_PC_TIMEMAP = "W03E21000700<W04122000800"
 MAX_PC_NAME_LENGTH = 32
 
 _PC_FIELD_DELIMITERS = (">", "<", "&#62", "&#60")
+_PC_MAC = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
 _PC_CONTROL_CHARACTER_LIMIT = 0x20
 
 
@@ -301,8 +303,11 @@ def check_rule(  # noqa: C901, PLR0911
     if not isinstance(rule, ParentalControlRule):
         return None
 
-    # Check that mac is available
-    if rule.mac is None:
+    # Check that mac is available and shaped like a MAC address. The
+    # MAC is written into the delimited rule table and doubles as the
+    # default name, so anything else could corrupt other rows.
+    if not isinstance(rule.mac, str) or not _PC_MAC.match(rule.mac):
+        _LOGGER.error("Invalid parental control rule MAC address")
         return None
 
     # Check that type is available and valid

@@ -24,6 +24,12 @@ from asusrouter.modules.wireguard import (
         ({"arguments": {"id": 3}, "id": 4}, 3),
         # Missing arguments
         ({}, 1),
+        # Unsafe arguments: placed into an rc_service command
+        ({"id": "1;reboot"}, None),
+        ({"id": 0}, None),
+        ({"id": 6}, None),
+        ({"id": True}, None),
+        ({"arguments": {"id": "2"}}, None),
     ],
 )
 def test_get_arguments(kwargs: Any, expected: int | None) -> None:
@@ -112,3 +118,16 @@ async def test_set_state(
         )
     else:
         callback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_state_refuses_unsafe_id() -> None:
+    """An injected id never reaches the router service call."""
+
+    callback = AsyncMock(return_value=True)
+
+    assert (
+        await set_state(callback, AsusWireGuardClient.ON, id="1;reboot")
+        is False
+    )
+    callback.assert_not_called()

@@ -29,6 +29,10 @@ _SENSITIVE_KEYS = frozenset(
         "key",
         "passwd",
         "password",
+        "priv",
+        "privkey",
+        "private",
+        "private_key",
         "psk",
         "radius_key",
         "secret",
@@ -38,15 +42,21 @@ _SENSITIVE_KEYS = frozenset(
         "wpa_psk",
     }
 )
-# `key: value` or `key=value` in loosely structured router text.
-# Only the value after a sensitive key is replaced. An unquoted value
-# runs to the next `,` `;` `}` `]` or line end; `&` ends it only when
-# another `name=` pair follows, so entity-encoded delimiters such as
-# `&#60` and spaces inside a value stay part of it.
+# `key: value` or `key=value` in loosely structured router text, for
+# sensitive keys only. A quoted value ends at its closing quote
+# (escaped quotes are skipped); an unquoted value runs to the end of
+# the line, so a secret containing `;`, `&` or spaces cannot leak its
+# tail. Anything after it on the same line is lost too, on purpose.
+_SENSITIVE_KEY_ALTERNATION = "|".join(
+    sorted(map(re.escape, _SENSITIVE_KEYS), key=len, reverse=True)
+)
 _TEXT_ASSIGNMENT = re.compile(
-    r"""(?P<key>["']?[A-Za-z0-9_-]+["']?)[ \t]*(?P<sep>[:=])[ \t]*"""
-    r"""(?P<value>"[^"]*"|'[^']*'"""
-    r"""|(?:(?!&[A-Za-z0-9_-]+=)[^,;\r\n}\]])*)"""
+    r"""(?<![A-Za-z0-9_-])"""
+    r"""(?P<key>["']?(?:[A-Za-z0-9]+[_-])*"""
+    rf"""(?:{_SENSITIVE_KEY_ALTERNATION})\d*["']?)"""
+    r"""[ \t]*(?P<sep>[:=])[ \t]*"""
+    r"""(?P<value>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\r\n}\]]*)""",
+    re.IGNORECASE,
 )
 _TRAILING_DIGITS = re.compile(r"\d+$")
 
@@ -101,9 +111,9 @@ def _redact_content(content: str | bytes) -> str:
 
     try:
         parsed = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return _redact(text)
-    return json.dumps(_redact(parsed), default=str)
+        return json.dumps(_redact(parsed), default=str)
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
+        return _redact_text(text)
 
 
 def _open_private_text(path: Path) -> TextIO:

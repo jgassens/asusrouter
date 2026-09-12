@@ -201,6 +201,7 @@ def process(
             KeyError,
             IndexError,
             TypeError,
+            OverflowError,
             RecursionError,
         ) as ex:
             _LOGGER.warning(

@@ -23,6 +23,7 @@ from asusrouter.modules.parental_control import (
     PC_RULE_MAP,
     ParentalControlRule,
     PCRuleType,
+    check_rule,
     read_pc_rules,
     set_rule,
     write_pc_rules,
@@ -257,3 +258,14 @@ async def test_retained_rule_fields_are_not_validated_or_altered() -> None:
     assert callback.await_args.kwargs["arguments"][KEY_PC_TIMEMAP].startswith(
         "router<value>"
     )
+
+
+@pytest.mark.parametrize(
+    "mac", ["AA>BB", "AA:BB:CC:DD:EE", "not a mac", "AABBCCDDEEFF", ""]
+)
+def test_check_rule_rejects_malformed_mac(mac: str) -> None:
+    """A MAC that is not colon-separated hex cannot enter the table."""
+
+    rule = ParentalControlRule(mac=mac, name="", type=PCRuleType.BLOCK)
+
+    assert check_rule(rule) is None

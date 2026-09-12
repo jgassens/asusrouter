@@ -140,7 +140,7 @@ async def _read_response_content(
     try:
         codecs.lookup(encoding)
     except LookupError:
-        _LOGGER.debug("Unknown response charset %r. Using UTF-8", encoding)
+        _LOGGER.debug("Unknown response charset. Using UTF-8")
         encoding = "utf-8"
     try:
         return body.decode(encoding)
@@ -845,6 +845,9 @@ class Connection:  # pylint: disable=too-many-instance-attributes
             headers=headers,
             ssl=self.config.get(ARCCKey.VERIFY_SSL),
             allow_redirects=False,
+            # A caller-supplied session may have no total timeout; a
+            # dripping response must still end.
+            timeout=aiohttp.ClientTimeout(total=self._timeout),
         ) as response:
             # Read the status code
             resp_status = response.status

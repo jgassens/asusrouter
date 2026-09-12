@@ -17,6 +17,7 @@ from asusrouter.error import (
     AsusRouterRequestFormatError,
 )
 from asusrouter.modules.endpoint import EndpointType
+from asusrouter.tools.converters import safe_int
 from asusrouter.tools.enum import FromIntMixin
 from asusrouter.tools.readers import read_json_content
 
@@ -53,7 +54,9 @@ def handle_access_error(
     message = read_json_content(content)
 
     # Get error code
-    error_status = int(message.get("error_status") or UNKNOWN_MEMBER)
+    error_status = safe_int(
+        message.get("error_status"), default=UNKNOWN_MEMBER
+    )
     # Formatting errors
     if error_status in (
         HTTPStatus.JSON_BAD_FORMAT,

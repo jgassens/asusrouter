@@ -26,6 +26,10 @@ class AsusWireGuardServer(IntEnum):
     ON = 1
 
 
+WIREGUARD_ID_MIN = 1
+WIREGUARD_ID_MAX = 5
+
+
 def _get_arguments(**kwargs: Any) -> int | None:
     """Get the arguments from kwargs."""
 
@@ -36,6 +40,16 @@ def _get_arguments(**kwargs: Any) -> int | None:
     if wlan_id is None:
         wlan_id = 1
         _LOGGER.debug("Using default id 1")
+
+    # The id is placed into an rc_service command; only a small
+    # integer is acceptable there.
+    if (
+        isinstance(wlan_id, bool)
+        or not isinstance(wlan_id, int)
+        or not WIREGUARD_ID_MIN <= wlan_id <= WIREGUARD_ID_MAX
+    ):
+        _LOGGER.debug("Invalid WireGuard id found in arguments: %r", wlan_id)
+        return None
 
     return wlan_id
 
@@ -49,6 +63,8 @@ async def set_state(
 
     # Get the arguments
     wlan_id = _get_arguments(**kwargs)
+    if wlan_id is None:
+        return False
 
     # WireGuard unit type (server or client)
     wg_unit = "wgs" if isinstance(state, AsusWireGuardServer) else "wgc"

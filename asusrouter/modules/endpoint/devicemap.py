@@ -180,7 +180,10 @@ def read_uptime_string(
     if when is None or seconds is None:
         return (None, seconds)
 
-    uptime = when - timedelta(seconds=seconds)
+    try:
+        uptime = when - timedelta(seconds=seconds)
+    except (OverflowError, ValueError):
+        return (None, None)
 
     # If robust_boottime is enabled, floor the uptime to even seconds
     # This will introduce a systematic error with up to 1 second delay

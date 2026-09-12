@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import quote
 
+import aiohttp
 import pytest
 
 from asusrouter.connection_config import ARConnectionConfigKey as ARCCKey
@@ -190,6 +191,7 @@ class TestConnectionMakeRequest:
             headers=self.DEFAULT_HEADERS,
             ssl=connection.config.get(ARCCKey.VERIFY_SSL),
             allow_redirects=False,
+            timeout=aiohttp.ClientTimeout(total=connection._timeout),
         )
 
         # Check result

@@ -28,11 +28,22 @@
 - Parsers skip malformed port-forwarding, VPN status, dual-WAN, port-status
   and sysinfo rows instead of raising; deeply nested JSON raises
   `AsusRouterDataError` instead of a recursion error.
-- OpenVPN client IDs are validated as integers 1 to 5 before use.
+- OpenVPN and WireGuard client IDs are validated as integers 1 to 5 before
+  they are placed into an `rc_service` command.
+- Parental control: `check_rule` rejects a MAC that is not colon-separated
+  hex, since the MAC is written into the delimited rule table and doubles
+  as the default name.
+- Every request carries the configured timeout even on a caller-supplied
+  session, so a dripping response cannot stay open indefinitely.
+- Parsers: an oversized integer literal, a non-numeric `error_status` and
+  an uptime beyond the datetime range no longer escape as raw
+  `ValueError`/`OverflowError`.
 - `async_call_service` no longer mutates the caller's arguments dict.
 - Dump tool: files are created private (0600, exclusive), the login payload
-  is not recorded, and tokens, cookies, passwords, PSKs and RADIUS keys are
-  redacted in metadata, logs and content. The CLI reads the password from a
+  is not recorded, and tokens, cookies, passwords, PSKs, RADIUS keys and
+  WireGuard private keys are redacted in metadata, logs and content. In
+  loose text a secret value is redacted to the end of its line, so
+  semicolons, `&` or escaped quotes inside it cannot leak a tail. The CLI reads the password from a
   prompt or `--password-stdin` and warns when it is given on the command line.
 - Removed unused code: `AsusRouterSessionError`, `CLIENT_MAP`, `ARWiFiBand`,
   `ARWiFiFrequency`, `PORT_SUBTYPE`, the empty RGB endpoint module and

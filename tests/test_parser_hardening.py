@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from asusrouter.asusrouter import AsusRouter
-from asusrouter.error import AsusRouterDataError
+from asusrouter.error import AsusRouterAccessError, AsusRouterDataError
 from asusrouter.modules.data import AsusData, AsusDataState
-from asusrouter.modules.endpoint import Endpoint, process
+from asusrouter.modules.endpoint import Endpoint, devicemap, process
+from asusrouter.modules.endpoint.error import AccessError, handle_access_error
 from asusrouter.modules.identity import AsusDevice
 from asusrouter.modules.parental_control import (
     KEY_PC_BLOCK_ALL,
@@ -30,7 +31,8 @@ from asusrouter.tools.readers import read_json_content
 
 
 @pytest.mark.parametrize(
-    "error_type", [KeyError, IndexError, TypeError, RecursionError]
+    "error_type",
+    [KeyError, IndexError, TypeError, OverflowError, RecursionError],
 )
 def test_endpoint_process_contains_parser_exceptions(
     error_type: type[Exception],
@@ -172,3 +174,28 @@ async def test_deep_json_ordinary_read_returns_cached_data(
     )
     with pytest.raises(AsusRouterDataError, match="nested too deeply"):
         await router.async_get_data(AsusData.PORTS, force=True, device="all")
+
+
+def test_read_json_content_rejects_huge_integer_literal() -> None:
+    """An integer beyond the interpreter digit limit is a data error."""
+
+    with pytest.raises(AsusRouterDataError):
+        read_json_content('{"n": ' + "9" * 5000 + "}")
+
+
+def test_handle_access_error_tolerates_non_numeric_status() -> None:
+    """A non-numeric error_status maps to the unknown access error."""
+
+    with pytest.raises(AsusRouterAccessError) as info:
+        handle_access_error('{"error_status": "nope"}')
+    assert info.value.args[1] == AccessError.UNKNOWN
+
+
+def test_read_uptime_string_tolerates_huge_seconds() -> None:
+    """An uptime beyond timedelta's range does not raise OverflowError."""
+
+    content = (
+        "Thu, 16 Nov 2023 07:17:45 +0100(" + "9" * 30 + " secs since boot)"
+    )
+
+    assert devicemap.read_uptime_string(content) == (None, None)

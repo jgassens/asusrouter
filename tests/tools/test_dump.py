@@ -192,10 +192,10 @@ def test_loose_text_redacts_only_sensitive_values() -> None:
     """Router text that is not JSON keeps its shape; only secrets go."""
 
     body = (
-        "wl0_ssid=Home-safe;wl0_wpa_psk=SENTINEL-PSK;"
-        "http_passwd=SENTINEL-HTTP;"
-        "{'asus_token': 'SENTINEL-TOKEN', 'model': 'RT-AX88U'}"
-        " the keyboard token_bucket note stays"
+        "wl0_ssid=Home-safe;wl0_wpa_psk=SENTINEL-PSK;\n"
+        "http_passwd=SENTINEL-HTTP\n"
+        "{'asus_token': 'SENTINEL-TOKEN', 'model': 'RT-AX88U'}\n"
+        "the keyboard token_bucket note stays"
     )
     redacted = _redact_content(body)
 
@@ -208,23 +208,41 @@ def test_loose_text_redacts_only_sensitive_values() -> None:
 @pytest.mark.parametrize(
     ("body", "kept", "gone"),
     [
-        ("psk=top&#60secret&more=1;", "more=1", "top&#60secret"),
+        ("more=1;psk=top&#60secret&x=1", "more=1", "top&#60secret"),
         (
             "Authorization: Basic dXNlcjpwYXNz==\nServer: httpd",
             "Server: httpd",
             "dXNlcjpwYXNz",
         ),
-        ("wl0_key1=DEADBEEF01;wl0_ssid=Home;", "wl0_ssid=Home", "DEADBEEF01"),
-        ("apikey=SENTINEL-API&ssid=Home", "ssid=Home", "SENTINEL-API"),
+        ("wl0_ssid=Home;wl0_key1=DEADBEEF01;", "wl0_ssid=Home", "DEADBEEF01"),
+        ("ssid=Home&apikey=SENTINEL-API", "ssid=Home", "SENTINEL-API"),
         ("{'wl0_wpa_psk': 'pass word', 'x': 1}", "'x': 1", "pass word"),
+        ('{"password": "front\\"TAIL", "x": 1}', '"x": 1', "TAIL"),
+        ("ssid=Home\npsk=a;b;TAIL\nmodel=RT", "model=RT", "TAIL"),
+        ("wgs_priv=SENTINEL-PRIV\nwgs_addr=10.6.0.1", "10.6.0.1", "SENTINEL"),
+        (
+            "wgc1_priv=SENTINEL-PRIV\nwgc1_ep=vpn.example",
+            "vpn.example",
+            "SENTINEL",
+        ),
+        ("wgc1_private_key=SENTINEL\nx=1", "x=1", "SENTINEL"),
     ],
 )
 def test_loose_text_redaction_covers_router_shapes(
     body: str, kept: str, gone: str
 ) -> None:
-    """Entity delimiters, spaces, numbered keys and apikey are covered."""
+    """Delimiters, spaces, escaped quotes, numbered keys, private keys."""
 
     redacted = _redact_content(body)
 
     assert gone not in redacted
     assert kept in redacted
+
+
+def test_deeply_nested_content_is_redacted_without_recursion_error() -> None:
+    """A recursion bomb in a response falls back to text redaction."""
+
+    body = "[" * 5000 + '{"psk": "SENTINEL"}' + "]" * 5000
+    redacted = _redact_content(body)
+
+    assert "SENTINEL" not in redacted
