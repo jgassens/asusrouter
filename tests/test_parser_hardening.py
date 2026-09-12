@@ -199,3 +199,11 @@ def test_read_uptime_string_tolerates_huge_seconds() -> None:
     )
 
     assert devicemap.read_uptime_string(content) == (None, None)
+
+
+def test_json_nesting_depth_ignores_brackets_inside_strings() -> None:
+    """Brackets inside string values do not count toward the depth limit."""
+
+    body = '{"name": "' + "[" * 500 + '", "x": [1, {"y": 2}]}'
+
+    assert read_json_content(body)["x"] == [1, {"y": 2}]

@@ -165,6 +165,27 @@ def read_js_variables(content: str, **kwargs: Any) -> dict[str, Any]:
     return js_variables
 
 
+MAX_JSON_NESTING = 64
+
+
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
+
+
+def _json_nesting_depth(content: str) -> int:
+    """Return the deepest bracket nesting outside string literals."""
+
+    depth = max_depth = 0
+    for character in _JSON_STRING.sub('""', content):
+        if character in "[{":
+            depth += 1
+            max_depth = max(max_depth, depth)
+            if max_depth > MAX_JSON_NESTING:
+                break
+        elif character in "]}":
+            depth -= 1
+    return max_depth
+
+
 @clean_input
 def read_json_content(content: str | None, **kwargs: Any) -> dict[str, Any]:
     """Get the json content."""
@@ -183,6 +204,16 @@ def read_json_content(content: str | None, **kwargs: Any) -> dict[str, Any]:
 
     # Handle keys without values
     content = re.sub(r":\s*(,|\})", ": null\\1", content)
+
+    # Refuse pathological nesting before parsing. Python 3.14's decoder
+    # no longer raises RecursionError for deep input, so the depth is
+    # checked explicitly; router responses are only a few levels deep.
+    if _json_nesting_depth(content) > MAX_JSON_NESTING:
+        _LOGGER.warning(
+            "read_json_content rejected excessively nested body of length %d",
+            len(content),
+        )
+        raise AsusRouterDataError("JSON response is nested too deeply")
 
     # Return the json content
     try:
