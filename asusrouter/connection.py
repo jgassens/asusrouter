@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import codecs
 from collections.abc import Awaitable, Callable, Mapping
 import contextlib
 from enum import StrEnum
@@ -135,6 +136,11 @@ async def _read_response_content(
 
     encoding = response.charset
     if not isinstance(encoding, str):
+        encoding = "utf-8"
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        _LOGGER.debug("Unknown response charset %r. Using UTF-8", encoding)
         encoding = "utf-8"
     try:
         return body.decode(encoding)

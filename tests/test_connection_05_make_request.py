@@ -236,6 +236,32 @@ class TestConnectionMakeRequest:
         assert result == (200, {"h": "v"}, "ok")
 
     @pytest.mark.asyncio
+    async def test_make_request_unknown_charset_falls_back_to_utf8(
+        self,
+        connection_factory: ConnectionFactory,
+    ) -> None:
+        """A bogus declared charset must not raise LookupError."""
+
+        connection = connection_factory()
+        mock_session = MagicMock()
+        mock_session.closed = False
+        connection._session = mock_session
+
+        mock_cm = self._create_mock_context_manager(
+            mock_response(200, {"h": "v"}, b"ok", charset="x-no-such-charset")
+        )
+        mock_session.request = MagicMock(return_value=mock_cm)
+
+        result = await connection._make_request(
+            EndpointService.LOGIN,
+            payload="data",
+            headers=None,
+            request_type=RequestType.POST,
+        )
+
+        assert result == (200, {"h": "v"}, "ok")
+
+    @pytest.mark.asyncio
     async def test_make_request_unicode_decode_error(
         self,
         connection_factory: ConnectionFactory,

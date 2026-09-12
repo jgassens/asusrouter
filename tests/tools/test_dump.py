@@ -203,3 +203,28 @@ def test_loose_text_redacts_only_sensitive_values() -> None:
     assert "wl0_ssid=Home-safe" in redacted
     assert "'model': 'RT-AX88U'" in redacted
     assert "keyboard token_bucket note stays" in redacted
+
+
+@pytest.mark.parametrize(
+    ("body", "kept", "gone"),
+    [
+        ("psk=top&#60secret&more=1;", "more=1", "top&#60secret"),
+        (
+            "Authorization: Basic dXNlcjpwYXNz==\nServer: httpd",
+            "Server: httpd",
+            "dXNlcjpwYXNz",
+        ),
+        ("wl0_key1=DEADBEEF01;wl0_ssid=Home;", "wl0_ssid=Home", "DEADBEEF01"),
+        ("apikey=SENTINEL-API&ssid=Home", "ssid=Home", "SENTINEL-API"),
+        ("{'wl0_wpa_psk': 'pass word', 'x': 1}", "'x': 1", "pass word"),
+    ],
+)
+def test_loose_text_redaction_covers_router_shapes(
+    body: str, kept: str, gone: str
+) -> None:
+    """Entity delimiters, spaces, numbered keys and apikey are covered."""
+
+    redacted = _redact_content(body)
+
+    assert gone not in redacted
+    assert kept in redacted

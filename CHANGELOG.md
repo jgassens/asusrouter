@@ -5,9 +5,15 @@
 - Connection: a caller's own cancellation now propagates instead of being
   swallowed as a failed connect; the login fallback no longer cancels the
   task it runs inside; a login on a closed session no longer awaits itself.
-- Connection: redirects are refused (`allow_redirects=False`, any 3xx is an
-  error) and response bodies are capped at 8 MiB, checked against both the
-  declared length and the decompressed stream.
+  On the request path `asyncio.CancelledError` is no longer wrapped as
+  `AsusRouterTimeoutError`; callers that caught that around shutdown now
+  see the cancellation itself.
+- Connection: redirects are no longer followed (`allow_redirects=False`;
+  any 3xx raises `AsusRouterDataError`). A setup that relied on the router
+  or a proxy redirecting an authenticated POST elsewhere must point the
+  library at the final address. Response bodies are capped at 8 MiB,
+  checked against both the declared length and the decompressed stream;
+  an unknown declared charset falls back to UTF-8.
 - Authorization retry is bounded to one re-login per request instead of
   recursing; a firmware update without release-note endpoints no longer logs
   a warning on every poll.

@@ -22,6 +22,7 @@ from asusrouter.modules.endpoint import EndpointService, EndpointType
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEYS = frozenset(
     {
+        "apikey",
         "authorization",
         "cookie",
         "http_passwd",
@@ -38,17 +39,25 @@ _SENSITIVE_KEYS = frozenset(
     }
 )
 # `key: value` or `key=value` in loosely structured router text.
-# Only the value after a sensitive key is replaced.
+# Only the value after a sensitive key is replaced. An unquoted value
+# runs to the next `,` `;` `}` `]` or line end; `&` ends it only when
+# another `name=` pair follows, so entity-encoded delimiters such as
+# `&#60` and spaces inside a value stay part of it.
 _TEXT_ASSIGNMENT = re.compile(
-    r"""(?P<key>["']?[A-Za-z0-9_-]+["']?)\s*(?P<sep>[:=])\s*"""
-    r"""(?P<value>"[^"]*"|'[^']*'|[^,;&\s}\]]*)"""
+    r"""(?P<key>["']?[A-Za-z0-9_-]+["']?)[ \t]*(?P<sep>[:=])[ \t]*"""
+    r"""(?P<value>"[^"]*"|'[^']*'"""
+    r"""|(?:(?!&[A-Za-z0-9_-]+=)[^,;\r\n}\]])*)"""
 )
+_TRAILING_DIGITS = re.compile(r"\d+$")
 
 
 def _is_sensitive_key(key: object) -> bool:
     """Return whether a key identifies secret data."""
 
-    normalized = str(key).casefold().replace("-", "_")
+    # `wl0_key1` .. `wl0_key4` and friends are numbered secrets.
+    normalized = _TRAILING_DIGITS.sub(
+        "", str(key).casefold().replace("-", "_")
+    )
     return any(
         normalized == sensitive or normalized.endswith(f"_{sensitive}")
         for sensitive in _SENSITIVE_KEYS
